@@ -176,10 +176,11 @@ Some of the built-in SS functions:
 
  * r-pull: Execute a single (non-live) pull request against the full db available to this user session
  * r-qes-by: A single query-entities-by call, e.g.:
- ```clj
+
+```clj
      (dato/r-qes-by dato {:name :find-tasks
                           :a    :task/title})
-  ```
+```
 
 There are others, I'll write about them later (functions for contacting/messaging other session directly, e.g. to start a RTC negotiation process)
 Also, each of these should have a "live" version whereby the client indicates they want to be kept up to date on any transactions that invalidate it.
