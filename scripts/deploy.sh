@@ -1,0 +1,1 @@
+rm -rf resources/public/advanced && rm -rf resources/public/js/_bin && rm -rf resources/public/js/app* && rm -rf resources/public/js/test* &&  rm -rf resources/public/js/bin/ && rm -rf resources/public/js/bin/ && DEBUG=true lein clean && DEBUG=true lein uberjar && scp target/uberjar/dato-0.1.0-SNAPSHOT-standalone.jar s@myechochamber.com:/home/s/dato/dato.jar

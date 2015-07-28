@@ -1,0 +1,122 @@
+html,body {
+   height: 100%;
+}
+
+body {
+  padding-bottom: 0px;
+  background-color: #f5f5f5;
+}
+
+.app-container {
+   padding: 0px;
+  background-color: #fff;
+  border: 1px solid #e5e5e5;
+  -webkit-border-radius: 5px;
+  -moz-border-radius: 5px;
+  border-radius: 5px;
+  -webkit-box-shadow: 0 1px 2px rgba(0,0,0,.05);
+  -moz-box-shadow: 0 1px 2px rgba(0,0,0,.05);
+   box-shadow: 0 1px 2px rgba(0,0,0,.05);
+   min-height: 85%;
+}
+
+#app-wrapper {
+   margin-top: 60px;
+}
+
+input.history {
+   display: none;
+}
+
+.sidebar {
+}
+
+.sidebar-search {
+   border-radius: 2px 0px 0px 0px;
+}
+
+.matching-result {
+   background-color: rgb(150,240,150);
+}
+
+.potential-drop {
+   background-color: rgb(175,255,175);
+}
+
+.exhibit-incomplete {
+   background-color: rgb(255,175,175);
+}
+
+.mouse-avatar { 
+   width: 30px;
+   height: 30px;
+   background-size: 30px;
+   position: absolute;
+   border-radius: 30px;
+   border: 1px solid #ccc;
+   opacity: 0.75;
+   box-shadow: 1px 1px 2px;
+   background-color: #ccffcc;
+   /* pointer-events: none; */
+   z-index: 999;
+}
+
+.mouse-avatar:hover {
+   width: 40px;
+   height: 40px;
+   background-size: 40px;
+   border-radius: 40px;
+   border: 3px solid red;
+   cursor: pointer;
+}
+   
+
+.drag-handle {
+   opacity: 0;
+   cursor: default;
+   -moz-user-select: none;
+   -khtml-user-select: none;
+   -webkit-user-select: none;
+   user-select: none;
+  /* Required to make elements draggable in old WebKit */
+   -khtml-user-drag: element;
+   -webkit-user-drag: element;
+}
+
+.exhibit-listing .drag-handle:hover {
+   opacity: 1;
+   cursor: move;
+}
+
+.section-listing .drag-handle:hover {
+   opacity: 1;
+   cursor: move;
+}
+
+.activity-list {
+   list-style-type: none;
+}
+
+.activity-entry {
+   padding: 10px 0px;
+   border-top: 1px solid #eee;
+}
+
+.preview-container {
+}
+
+.aligner { 
+   height: auto; 
+   min-height: 24em;
+   display: flex;
+   -webkit-box-align: center;
+   justify-content: center;
+}
+
+.aligner-item {
+}
+
+.aligner-item--fixed {
+   flex: none;
+   max-width: 50%;
+}
