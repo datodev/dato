@@ -11,6 +11,9 @@ This README is more representative of the goals/later design of Dato. Not everyt
 
 This is an implementation of TodoMVC using Datomic on the backend to persist data that's then fed to DataScript in the frontend. The UI is driven entirely from the DataScript db (even component local state will be backed there eventually). See the Rationale for more. [Here's a video](https://dl.dropboxusercontent.com/u/412963/dato/dato_todomvc.mp4) of what it looks like once it's running
 
+## Running this demo
+TODO: Write the instructions for running Datomic-free (oh, so painful).
+
 # Current status
 I'm extracting Dato out of a production app right now, refactoring it, and cutting away the proprietary pieces that shouldn't be in the library/framework. PR's and questions are encouraged and welcome as we work through lots of big ideas and minute details. As I continue to port more functionality from our existing app, this repo should turn from a toy example into a solid foundation.
 
