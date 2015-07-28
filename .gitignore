@@ -12,7 +12,6 @@ pom.xml.asc
 .hg/
 bin/datomic-*
 out/
-resources/pdfs/
 resources/tmp/
 resources/public/js/bin-debug
 resources/public/js/bin
