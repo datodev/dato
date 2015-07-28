@@ -33,6 +33,8 @@ I doubt Dato's design will ever scale to the needs of e.g. Twitter or FB. It sho
 
 ## Client-side flow:
 
+See `components/root.cljs` for most of the app-specific implementation of this demo.
+
 At bootup, the client will request two things from the server via a hard-coded (but replaceable) ss method, `bootstrap`: The current Datomic schema (which it will merge with a client-side schema and use to create the local DataScript DB), and the session-id. From there, everything falls into the following flow:
 
  1. Event is triggered (from the server, UI interaction, or something else)
@@ -44,6 +46,7 @@ At bootup, the client will request two things from the server via a hard-coded (
 
 An example of the flow given when a user logs out:
 
+```clj
     (defmethod transition :ui/user-logged-out
       [db payload]
       ;; This will cause out UI to re-render with the logged-out view
@@ -58,6 +61,7 @@ An example of the flow given when a user logs out:
          ;; :server/log-out!-succeeded or :server/log-out!-failed. We could implement specific handlers for those 
          ;; cases if we'd like (rather than optimistically logging out the user, as in this example).
          (log-out!)))
+```
 
 Nearly all state transitions and effects can be modeled with these two simple concepts (although some transitions are cumbersome). But there are three distinct categories for transitions:
 
@@ -67,6 +71,7 @@ Nearly all state transitions and effects can be modeled with these two simple co
 
 The difference is simply indicated via meta-data on the transition handler's return-data, e.g.:
 
+```clj
     (defmethod con/transition :ui/task-toggled
      [db {:keys [data]}]
      (let [task (:task data)]
@@ -92,9 +97,11 @@ The difference is simply indicated via meta-data on the transition handler's ret
           ;; who have indicated their interest. This client will not receive acknowledgment of the tx
           ;; (although this design aspect may change depending on real-world use cases)
           {:tx/broadcast? true})))
+```
 
 There are also times where it's useful to first get confirmation of server-side receipt before triggering another transition. This can be done via a `:tx/cb` key in the meta-data
 
+```clj
     (defmethod con/transition :ui/content-created
      [db {:keys [data]}]
      (let [dato-guid (d/ruuid)
@@ -116,26 +123,31 @@ There are also times where it's useful to first get confirmation of server-side 
       [{:keys [ss]} old-db new-db {:keys [file content]}]
       (let [upload-file! (:upload-file! ss)]
         (upload-file! content file)))
+```
 
 > (NB: the example above would break replay since the file/blob that flowed through the event bus would not be serializable. This breaks one of the goals of the project, and is an open area of research. Also, the signature of the `cast!` call there is likely to change.)
 
 Using `cast!` as the basis of casting messages (or raising events, still deciding on the terminology), Dato provides some sugar on top of this when building the UI side of things. A typical database transaction in a live HTML form might look like: 
 
+```clj
     [:input.toggle {:type      "checkbox"
                     :checked   (:task/completed? task)
                     :on-change (fn [event]
                                  (transact! :task-toggled [{:db/id           (:db/id task)
                                                             :task/completed? (not (:task/completed? task))}]
                                             {:tx/persist? true}))}]
+```
 
 Where `transact!` takes advantage of a default (but overrideable) transition handler provided for by Dato, :db/updated. It simply dumps the datoms into the db and passes along the meta-data. Here's how it's implemented:
 
+```clj
     (defmethod transition :db/updated
       [db {:keys [data] :as payload}]
       (assert (keyword? (:intent data)) "DB update must include an :intent key with a keyword value")
       (assert (vector? (:tx data)) "DB update must include an :tx key with a vector value of valid Datascript transaction data")
       (let [m (meta (:tx data))]
         (with-meta (:tx data) (assoc m :tx/intent (:intent data)))))
+```
 
 Implementing purely-functional state transition in the UI becomes trivial. Of course, you can build your own abstractions/handlers by using `cast!` and `(defmethod transition :event/name ...)` directly.
 
@@ -146,6 +158,7 @@ The server creates an instance of `DatoServer`, providing a routing table for SS
 
 The code might look like:
 
+```clj
     (def dato-server
       (dato/map->DatoServer {:routing-table (assoc dato/default-routing-table
                                                    ;; SS function to be made available/callable by the client
@@ -157,13 +170,16 @@ The code might look like:
       (dato/start! {:server dato/dato-server
                     :port   8080})
       (run-web-server port))
+```
 
 Some of the built-in SS functions:
 
  * r-pull: Execute a single (non-live) pull request against the full db available to this user session
  * r-qes-by: A single query-entities-by call, e.g.:
+ ```clj
      (dato/r-qes-by dato {:name :find-tasks
                           :a    :task/title})
+  ```
 
 There are others, I'll write about them later (functions for contacting/messaging other session directly, e.g. to start a RTC negotiation process)
 Also, each of these should have a "live" version whereby the client indicates they want to be kept up to date on any transactions that invalidate it.
