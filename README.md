@@ -40,7 +40,7 @@ At bootup, the client will request two things from the server via a hard-coded (
  1. A effecting handler is then called with a copy of the previous db, the current db, and the event payload. It's also given several functions from Dato to do things like make SS calls, trigger further events, etc.
  1. The UI is re-rendered with the new copy of the DB, and we wait for another event to loop back to step 1
 
-![Dato State Flow](/docs/resources/omchaya_flow.png "Dato State Flow")
+![Dato State Flow](/docs/resources/dato_flow.png "Dato State Flow")
 
 An example of the flow given when a user logs out:
 
