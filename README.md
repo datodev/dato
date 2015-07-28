@@ -2,7 +2,7 @@ Note: The name (Dato) is going to change, and is just a placeholder.
 
 # Dato
 
-Dato is an alternative approach to building apps, heavily inspired by Meteor, Firebase, and Parse, but with a strong bent towards using FP to make app design, iteration, tooling, and implementing features considerable easier.
+Dato is an alternative approach to building apps, heavily inspired by Meteor, Firebase, and Parse, but with a strong bent towards using FP to make app design, iteration, tooling, and implementing features considerable easier. By default it comes with lag-compensation, security rules, and server-side function call. It'll eventually extensible so that e.g. offline apps, Operational Transform (Etherpad/Google Docs-like functionality), and other behaviors should be accessible and efficient.
 
 # Status
 This README is more representative of the goals/later design of Dato. Not everything mentioned in here is currently in the Dato repo (in particular, security and live-queries, although for this demo it's not necessary). Please check/create issues if anything seems vague/missing/etc.
