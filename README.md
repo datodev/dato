@@ -98,7 +98,7 @@ The difference is simply indicated via meta-data on the transition handler's ret
        (with-meta
           [{:db/id (:db/id session)
              :mouse/position [x y]}]
-          ;; The change will be inserted into our local db and send to an in-memory instance of Datomic
+          ;; The change will be inserted into our local db and sent to an in-memory instance of Datomic
           ;; (not persisted to disk), and the resultant server-side tx will be broadcast out to clients
           ;; who have indicated their interest. This client will not receive acknowledgment of the tx
           ;; (although this design aspect may change depending on real-world use cases)
@@ -121,8 +121,8 @@ There are also times where it's useful to first get confirmation of server-side 
                     ;; we don't have to introduce racey workarounds.
                     (let [persisted-content (dsu/qe-by new-db :dato/guid dato-guid)]
                      (dato/cast! {:event :ui/file-ready-to-upload
-                                  :data {:content      content
-                                         :file-or-blob (:file data)}})))})))
+                                  :data {:content content
+                                         :file    (:file data)}})))})))
 
 
     (defmethod effect! :ui/file-ready-to-upload
@@ -144,7 +144,7 @@ Using `cast!` as the basis of casting messages (or raising events, still decidin
                                             {:tx/persist? true}))}]
 ```
 
-Where `transact!` takes advantage of a default (but overrideable) transition handler provided for by Dato, :db/updated. It simply dumps the datoms into the db and passes along the meta-data. Here's how it's implemented:
+Where `transact!` takes advantage of a default (but overrideable) transition handler provided for by Dato, `:db/updated`. It simply dumps the datoms into the db and passes along the meta-data. Here's how it's implemented:
 
 ```clj
     (defmethod transition :db/updated
@@ -181,15 +181,15 @@ The code might look like:
 Some of the built-in SS functions:
 
  * r-pull: Execute a single (non-live) pull request against the full db available to this user session
- * r-qes-by: A single query-entities-by call, e.g.:
+ * r-qes-by: A single query-entities-by call, e.g. to get a one-off report of all of the entities with a `task/title` attribute:
 
 ```clj
      (dato/r-qes-by dato {:name :find-tasks
                           :a    :task/title})
 ```
 
-There are others, I'll write about them later (functions for contacting/messaging other session directly, e.g. to start a RTC negotiation process)
-Also, each of these should have a "live" version whereby the client indicates they want to be kept up to date on any transactions that invalidate it.
+There are others, I'll write about them later (functions for contacting/messaging other session directly, e.g. to start a WebRTC negotiation process)
+Also, each of these should have a "live" version whereby the client indicates they want to be kept up to date on any transactions that invalidate it, but that's work yet to be done.
 
 # Credit
 The vast majority of the heavy lifting around Datomic/DataScript has been done by Daniel Woelfel (@dwwoelfel). I put together this example repo and implemented a bit of sugar on top.
