@@ -43,7 +43,7 @@ See `components/root.cljs` for most of the app-specific implementation of this d
 At bootup, the client will request two things from the server via a hard-coded (but replaceable) ss method, `bootstrap`: The current Datomic schema (which it will merge with a client-side schema and use to create the local DataScript DB), and the session-id. From there, everything falls into the following flow:
 
  1. Event is triggered (from the server, UI interaction, or something else)
- 1. A (non-effectul, pure) transition handler is called with an immutable instance of the current database and the event payload. It returns additions/retractions that should happen as a response to the event.
+ 1. A (non-effectful, pure) transition handler is called with an immutable instance of the current database and the event payload. It returns additions/retractions that should happen as a response to the event.
  1. A effecting handler is then called with a copy of the previous db, the current db, and the event payload. It's also given several functions from Dato to do things like make SS calls, trigger further events, etc.
  1. The UI is re-rendered with the new copy of the DB, and we wait for another event to loop back to step 1
 
