@@ -22,7 +22,7 @@ I'm extracting Dato out of a production app right now, refactoring it, and cutti
 # Rationale
 In many ways, this is a radical departure from building apps as it's normally done. Sitting down to build the current production app that Dato is extracted from, I decided I wanted to do away with all of the cruft, the tedious non-app-specific work I had to do again and again whenever starting up a new app. There are also several frustrating pieces in current approaches to the frontend, in particular state and the shape of the state. So the technical goals for the project (All videos below are from previous experiments or products that have informed Dato's designs or goals, not yet from Dato itself):
 
- * UI driven by a flat, homogeneous immutable data structure (DataScript in this case)
+ * UI driven by a flat, homogeneous, queryable/navigable db-like immutable data structure (DataScript in this case)
  * Explicit separation of state transitions from effects in the UI (as much is possible in ClojureScript)
  * No REST endpoints, anywhere. At all. (This may change to something auto-generated from Dato's structures for API interop, but not for now). Instead, we expose the *entire* backend database to the user for natural data navigation/retrieval, and we use server-side functions for effects 
    * Datomic gives us a fantastic way to filter databases so that we have the illusion of having access to the full database and never have to worry security from the client's PoV.
