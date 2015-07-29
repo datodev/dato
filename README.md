@@ -7,6 +7,8 @@ Dato is an alternative approach to building apps, heavily inspired by Meteor, Fi
 # Status
 This README is more representative of the goals/later design of Dato. Not everything mentioned in here is currently in the Dato repo (in particular, security and live-queries, although for this demo it's not necessary). Please check/create issues if anything seems vague/missing/etc.
 
+The current Data-shuffling bits are *heavily* WIP. Current work is largely focused around the ideas and possibilities (though there are lots of plans for optimizations)
+
 # Dato TodoMVC Example
 
 This is an implementation of TodoMVC using Datomic on the backend to persist data that's then fed to DataScript in the frontend. The UI is driven entirely from the DataScript db (even component local state will be backed there eventually). See the Rationale for more. [Here's a video](https://dl.dropboxusercontent.com/u/412963/dato/dato_todomvc.mp4) of what it looks like once it's running
