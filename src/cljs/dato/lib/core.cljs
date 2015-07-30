@@ -12,6 +12,8 @@
   (:require-macros [cljs.core.async.macros :as async :refer [alt! go go-loop]])
   (:import [goog Uri]))
 
+(defn chan? [value]
+  (satisfies? cljs.core.async.impl.protocols/ReadPort value))
 
 (defonce network-enabled?
   (atom true))
@@ -50,13 +52,25 @@
         ws-ch              (async/chan)
         dato-ch            (async/chan)
         ss-cast!           #(put! ws-ch %)
+        pending-rpc        (atom {})
         ws                 (ws/build dato-host dato-path {:on-open    (fn [event] (js/console.log ":on-open :" event))
                                                           :on-close   (fn [event] (js/console.log ":on-close :" event))
                                                           :on-message (fn [event]
+                                                                        (js/console.log "Bla: " event)
                                                                         (let [fr (js/FileReader. (.-data event))]
                                                                           (aset fr "onloadend" (fn [e]
                                                                                                  (let [data (transit/read transit-reader (.. e -target -result))]
-                                                                                                   (ss-cast! data))))
+                                                                                                   (js/console.log "Bla 2: " data)
+                                                                                                   (if-let [cb-id (:server/rpc-id data)]
+                                                                                                     (let [cb-or-ch (get @pending-rpc cb-id)]
+                                                                                                       (js/console.log "pending-rpc: " @pending-rpc)
+                                                                                                       (swap! pending-rpc dissoc cb-id)
+                                                                                                       ;; Should we just pass the whole payload through, or just the data/resultts?
+                                                                                                       (cond
+                                                                                                         (chan? cb-or-ch) (put! cb-or-ch (:data data))
+                                                                                                         (fn? cb-or-ch)   (cb (:data data))
+                                                                                                         :else            nil))
+                                                                                                     (ss-cast! data)))))
                                                                           (.readAsText fr (.-data event))))
                                                           :on-error   (fn [event] (js/console.log ":on-error :" event))})
         dato-send!         (fn [event data]
@@ -77,7 +91,30 @@
                                   (js/console.log "cast! " (pr-str payload))
                                   (put! dato-ch payload))
                                 (js/console.log "Not yet bootstrapped, ignoring cast"))
-                              true))]
+                              true))
+        ss-data            (atom {})
+        ss-api             (atom {})
+        ;; ???: Do the perf implications of anonymous functions mean these
+        ;; shouldn't be in a tight loop?
+        fn-desc->rpc       (fn fn-desc->rpc [remote-name desc]
+                             (fn [& all-args]
+                               ;; TODO: Check if last argument is a channel, an
+                               (let [cb-or-ch (last all-args)
+                                     cb       (cond
+                                                (fn? cb-or-ch)   cb-or-ch
+                                                (chan? cb-or-ch) #(put! cb-or-ch %)
+                                                :else            false)
+                                     args     (if cb
+                                                (drop-last 1 all-args)
+                                                all-args)
+                                     uuid     (d/squuid)]
+                                 (when (fn? cb)
+                                   (swap! pending-rpc assoc uuid cb-or-ch))
+                                 (dato-send! remote-name {:args   args
+                                                          :rpc/id uuid})
+                                 (if (chan? cb-or-ch)
+                                   cb-or-ch
+                                   uuid))))]
     {:comms    comms
      ;; Just for debugging to simulate messages coming in from the
      ;; server
@@ -88,22 +125,29 @@
                 :send! dato-send!
                 :ws    ws}
      :db       app-db
+     ::ss-dato ss-data
+     :ss       ss-api
+     ;; TODO: The individual ss api functions below should be moved
+     ;; into the bootstrapped :ss key. The multiple-arities and
+     ;; pre-checks makes it difficult though. Need to think about how
+     ;; to propagate that from server to client for a good dev
+     ;; experience.
      :api      {:r-pull     (fn [data]
                               {:pre [(not (nil? (:name data)))
                                      (not (nil? (:pull data)))
                                      (not (nil? (:lookup data)))]}
-                              (dato-send! :user/r-pull data))
+                              (dato-send! :ss/r-pull data))
                 :r-qes-by   (fn [data]
                               {:pre [(not (nil? (:name data)))
                                      (not (nil? (:a data)))]}
-                              (dato-send! :user/r-qes-by data))
+                              (dato-send! :ss/r-qes-by data))
                 :r-transact (fn rtransact
                               ([datoms]
                                (rtransact datoms {}))
                               ([datoms meta]
                                {:pre [(sequential? datoms)]}
-                               (dato-send! :user/tx-requested {:datoms datoms
-                                                               :meta   meta})))
+                               (dato-send! :ss/tx-requested {:datoms datoms
+                                                             :meta   meta})))
                 :transact!  (fn transact!
                               ([intent tx]
                                (transact! intent tx {} nil))
@@ -133,10 +177,10 @@
                                     (<! (async/timeout 250))
                                     (js/console.log "Dato WebSocket not ready (" (.-readyState ws) "), waiting...")
                                     (recur)))
-                                (dato-send! :user/bootstrap {})
+                                (dato-send! :ss/bootstrap {})
                                 (js/console.log "1. Bootstrap")
                                 (let [{:keys [data] :as -bootstrap} (loop [msg (<! ws-ch)]
-                                                                      (if (= :server/bootstrap-succeeded (:event msg))
+                                                                      (if (= :ss/bootstrap-succeeded (:event msg))
                                                                         msg
                                                                         ;; Not the
                                                                         ;; message
@@ -159,7 +203,13 @@
                                                                           (recur (<! ws-ch)))))
                                       _ (js/console.log "2. Bootstrap; " data)
                                       {:keys [session-id schema]}      data]
+                                  (swap! ss-data merge (:ss data))
+                                  (reset! ss-api (->> (:ss data)
+                                                      (map (fn [[k v]]
+                                                             {(keyword (name k)) (fn-desc->rpc k v)}))
+                                                      (reduce merge {})))
                                   (js/console.log "3. bootstrap: " app-db)
+                                  (js/console.log "4. " @ss-api)
                                   ;; Do something with data
                                   (let [db (let [bootstrapped? (bootstrapped? @app-db)
                                                  conn          (if bootstrapped?
@@ -185,7 +235,7 @@
                                                                 (let [prepped (db/prep-broadcastable-tx-report tx-report)]
                                                                   (when @network-enabled?
                                                                     (js/console.log "Send that tx-shit!")
-                                                                    (dato-send! :user/tx-requested prepped)))))))
+                                                                    (dato-send! :ss/tx-requested prepped)))))))
                                                (js/console.log "too: " (pr-str (type app-db)))
                                                (let [local-session-id (d/tempid :db.part/user)]
                                                  (d/transact! app-db [{:db/id                 (d/tempid :db.part/user)
@@ -233,10 +283,17 @@
 (defn local-session [conn]
   (d/entity conn (dsu/val-by conn :local/current-session)))
 
+(defn ss [dato]
+  @(:ss dato))
+
 (defn start-loop! [dato]
   (let [dato-ch (get-in dato [:comms :dato])
         conn    (get-in dato [:db])
-        context (get-in dato [:api])]
+        ;; TODO: This is messy, clean up once api and ss are merged
+        ;; concepts
+        api     (get-in dato [:api])
+        ss      (get-in dato [:ss])
+        context (merge api {:ss ss})]
     (go
       (loop []
         (alt!
