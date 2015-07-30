@@ -51,6 +51,22 @@
 (defn dato-session [session]
   (get-in @all-sessions [(:id session)]))
 
+(defn session-server [session]
+  (let [full-session (if (:live session)
+                       session
+                       (dato-session session))
+        server (get-in full-session [:live :dato :server])]
+    (if (var? server)
+      @server
+      server)))
+
+(defn session-routes [session]
+  (let [server (session-server session)
+        routes (:routing-table server)]
+    (if (var? routes)
+      @routes
+      routes)))
+
 (defn serializable-sessions [all]
   (reduce into (map (fn [[k v]] {k (dissoc v :live)}) all)))
 
@@ -112,13 +128,14 @@
        (reduce (fn [run entry]
                  (assoc run (:db/ident entry) entry)) {})))
 
-(defn on-open [ch]
+(defn on-open [dato-server ch]
   (let [oc               (async/originating-request ch)
         session          (:session oc)
         id               (:id session)
         others           @all-sessions
         user-db-ids      (mapv :db/id (dsu/qes-by (datod/ddb) :user/email))
-        full-session     {:live            {:ch ch}
+        full-session     {:live            {:ch   ch
+                                            :dato dato-server}
                           :id              id
                           :session/key     id
                           :session/user-id (rand-nth user-db-ids)}
@@ -147,17 +164,31 @@
 (defn on-message [ch msg]
   (let [oc               (async/originating-request ch)
         session          (:session oc)
-        routing-table    (get-in session [:live :dato :routing-table])
+        routing-table    (session-routes session)
         id               (:id session)
         my-ch            (get-in @all-sessions [id :live :ch])
         others           (dissoc @all-sessions id)
         _                (println "Message data:" (pr-str msg))
         raw-incoming     (cdc/decode (.getBytes msg) :transit)
         [event msg-data] raw-incoming
+        args             (:args msg-data)
+        ;; this will fail for e.g. (log-out!) (:args msg-data) will be nil
+        rpc?             (boolean args)
         _                (println "raw-incoming ffs: " (pr-str raw-incoming))
         _                (println "\t: " (pr-str [event] :handler))
+        _                (println "Routes availabe in table: " (pr-str routing-table))
+        _                (println "\targs: " args)
         handler          (get-in routing-table [[event] :handler] default-handler)
-        data             (handler session raw-incoming all-sessions)
+        ;; temp hackishness
+        handler          (if (var? handler)
+                           @handler
+                           handler)
+        data             (if rpc?
+                           (do
+                             (println "rpc")
+                             {:server/rpc-id (:rpc/id msg-data)
+                              :data          (apply (partial handler session all-sessions) args)})
+                           (handler session raw-incoming all-sessions))
         _                (println "data: " (pr-str data))
         encoded          (cdc/encode data :transit)]
     (when data
@@ -180,9 +211,16 @@
 (defn bootstrap-user [session incoming context]
   (let [my-session-id (get-in @all-sessions [(:id session) :session/key])
         full-session  (dato-session session)
-        db            (user-db (:session/user-id session))]
-    (ss-msg :server/bootstrap-succeeded
+        db            (user-db (:session/user-id session))
+        ;;ss (get-in full-session [:ss :])
+        server        (session-server session)
+        ss            (->> (session-routes session)
+                           (filter (fn [[k v]] (= "ss" (namespace (first k)))))
+                           (mapv (fn [[k v]] {(first k) (dissoc v :handler)}))
+                           (reduce merge {}))]
+    (ss-msg :ss/bootstrap-succeeded
             {:session (dissoc full-session :live)
+             :ss      ss
              :schema  (datomic-db->datomic-schema db)})))
 
 (defn update-session [my-session [_ data] context]
@@ -242,17 +280,20 @@
 
 (def default-routing-table
   {[:session/updated]   {:handler update-session}
-   [:user/tx-requested] {:handler handle-transaction}
-   [:user/r-qes-by]     {:handler r-qes-by}
-   [:user/r-pull]       {:handler r-pull}
-   [:user/bootstrap]    {:handler bootstrap-user}})
+   [:ss/tx-requested] {:handler handle-transaction}
+   [:ss/r-qes-by]     {:handler r-qes-by}
+   [:ss/r-pull]       {:handler r-pull}
+   [:ss/bootstrap]    {:handler bootstrap-user}})
+
+(defn new-routing-table [table]
+  (merge default-routing-table table))
 
 (defn new-session-id []
   (str (UUID/randomUUID)))
 
 (defrecord DatoServer [routing-table])
 
-(defn ?assign-id [handler]
+(defn ?assign-id [handler dato-server]
   (fn [request]
     (let [id        (get-in request [:session :id] (new-session-id))
           mouse-pos [0 0]
@@ -262,14 +303,17 @@
                                  (assoc-in [:session :live :dato] dato-server)))]
       response)))
 
-(defn create-websocket []
-  (iw/run
-   (-> (var handler)
-       ;;(ring-resource/wrap-resource "public")
-       (imw/wrap-websocket {:on-message (var on-message)
-                            :on-open    (var on-open)
-                            :on-close   (var on-close)})
-       ?assign-id
-       (imw/wrap-session))
-   {:path "/ws"
-    :host "0.0.0.0"}))
+(defn start! [handler dato-server & [port]]
+  (def iw-handler
+    (iw/run
+      (-> handler
+          ;;(ring-resource/wrap-resource "public")
+          (imw/wrap-websocket {:on-message (var on-message)
+                               :on-open    (partial on-open dato-server)
+                               :on-close   (var on-close)})
+          (?assign-id dato-server)
+          (imw/wrap-session))
+      {:path "/ws"
+       :host "0.0.0.0"}))
+  (setup-tx-report-ch (datod/conn))
+  (def stop-tx-broadcast-ch (start-tx-broadcast! tx-report-mult)))

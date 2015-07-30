@@ -34,9 +34,6 @@
                 [:script {:src "/js/bin-debug/main.js"}]
                 [:script {:src "/js/bin/main.js"}])]])))
 
-(def dato-server
-  (dato/map->DatoServer {:routing-table dato/default-routing-table}))
-
 (defroutes routes
   (route/resources "/")
   (GET "/*" req bootstrap-html))
@@ -57,34 +54,29 @@
 (defn handler [{c :context}]
   (resp/redirect (str c "/index.html")))
 
-(defn ?assign-id [handler]
-  (fn [request]
-    (let [id        (get-in request [:session :id] (dato/new-session-id))
-          mouse-pos [0 0]
-          response  (handler (-> request
-                                 (assoc-in [:session :id] id)
-                                 (assoc-in [:session :mouse :pos] mouse-pos)
-                                 (assoc-in [:session :live :dato] dato-server)))]
-      response)))
+;; [session all-sessions & args]
+(defn add [_ _ x y]
+  (+ x y))
 
-(defn create-websocket []
-  (iw/run
-   (-> (var handler)
-       (ring-resource/wrap-resource "public")
-       (imw/wrap-websocket {:on-message (var dato/on-message)
-                            :on-open    (var dato/on-open)
-                            :on-close   (var dato/on-close)})
-       ?assign-id
-       (imw/wrap-session))
-   {:path "/ws"
-    :host "0.0.0.0"}))
+(defn sum [_ _ & numbers]
+  (reduce + 0 numbers))
+
+(defn my-reverse [_ _ list]
+  (vec (reverse list)))
+
+(def dato-routes
+  (dato/new-routing-table {[:ss/add]     {:handler add}
+                           [:ss/sum]     {:handler sum}
+                           [:ss/reverse] {:handler my-reverse}}))
+
+(def dato-server
+  (dato/map->DatoServer {:routing-table #'dato-routes}))
 
 (defn run [& [port]]
   (when is-dev?
     (dev/start-figwheel!))
-  (create-websocket)
-  (dato/setup-tx-report-ch (datod/conn))
-  (def stop-tx-broadcast-ch (dato/start-tx-broadcast! dato/tx-report-mult))
+  (dato/start! handler {:server (var dato-server)
+                        :port   8080})
   (run-web-server port))
 
 (defn -main [& [port]]
