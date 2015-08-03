@@ -1,6 +1,6 @@
-(ns dato.db.incoming
+(ns dato.lib.incoming
   (:require [datomic.api :as d]
-            [dato.datomic :as datod]))
+            [dato.lib.datomic :as datod]))
 
 (defn ensure-pull-required-fields [pattern]
   (letfn [(ensure-fields [node]
@@ -49,14 +49,14 @@
 (defn group-datoms-by-cant-save [datoms fids db cust]
   (group-by (fn [d] (cant-save-reason d fids db cust)) datoms))
 
-(defn datom->tx [datom fids]
+(defn datom->tx [db datom fids]
   [(if (:added datom)
      :db/add
      :db/retract)
    ;; we know that -e will be unique to each entity
    (ds-id->tempid (:e datom))
    (:a datom)
-   (if (and (datod/ref-attr? (datod/ddb) (:a datom))
+   (if (and (datod/ref-attr? db (:a datom))
             (:added datom))
      (ds-id->tempid (:v datom))
      (:v datom))])
@@ -84,7 +84,7 @@
             {} tempids)))
 
 (defn create-txes [filtered-datoms fids db cust]
-  (concat (map (fn [d] (datom->tx d fids)) filtered-datoms)
+  (concat (map (fn [d] (datom->tx db d fids)) filtered-datoms)
           (owned-txes db cust fids)
           (fid-txes fids)))
 

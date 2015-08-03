@@ -60,7 +60,7 @@
                                                                         (let [fr (js/FileReader. (.-data event))]
                                                                           (aset fr "onloadend" (fn [e]
                                                                                                  (let [data (transit/read transit-reader (.. e -target -result))]
-                                                                                                   (js/console.log "Bla 2: " data)
+                                                                                                   (js/console.log "Bla 2: " data " pending: " pending-rpc)
                                                                                                    (if-let [cb-id (:server/rpc-id data)]
                                                                                                      (let [cb-or-ch (get @pending-rpc cb-id)]
                                                                                                        (js/console.log "pending-rpc: " @pending-rpc)
@@ -124,7 +124,10 @@
                 :path  dato-path
                 :send! dato-send!
                 :ws    ws}
-     :db       app-db
+     :conn     app-db
+     :db       (fn
+                 ([] @(app-db))
+                 ([conn] @(conn)))
      ::ss-dato ss-data
      :ss       ss-api
      ;; TODO: The individual ss api functions below should be moved
@@ -219,6 +222,8 @@
                                              ;; Check if we're reloading
                                              ;; with a pre-existing db
                                              (when-not bootstrapped?
+                                               (js/console.log (pr-str schema))
+                                               (js/console.log (pr-str (vals schema)))
                                                ;;(js/console.log "conn: " (pr-str conn))
                                                (remove-watch app-db :global-listener)
                                                (reset! app-db @conn)
@@ -238,6 +243,7 @@
                                                                     (dato-send! :ss/tx-requested prepped)))))))
                                                (js/console.log "too: " (pr-str (type app-db)))
                                                (let [local-session-id (d/tempid :db.part/user)]
+                                                 (d/transact! app-db (vals schema))
                                                  (d/transact! app-db [{:db/id                 (d/tempid :db.part/user)
                                                                        :dato.meta/bootrapped? true}
                                                                       ;; TODO: This can likely be moved out to a user-land handler
@@ -260,7 +266,10 @@
   (apply (get-in dato [:api :bootstrap!]) args))
 
 (defn db [dato]
-  (:db dato))
+  @(:conn dato))
+
+(defn conn [dato]
+  (:conn dato))
 
 ;; Do these need special-cased? Can just be exposed as built-in
 ;; server-side methods?
@@ -277,6 +286,9 @@
   (js/console.log "transact!")
   (apply (get-in dato [:api :transact!]) args))
 
+(defn cast! [dato event-data]
+  ((get-in dato [:api :cast!]) event-data))
+
 (defn me [conn]
   (dsu/qe-by conn :user/me? true))
 
@@ -288,12 +300,12 @@
 
 (defn start-loop! [dato]
   (let [dato-ch (get-in dato [:comms :dato])
-        conn    (get-in dato [:db])
+        conn    (get-in dato [:conn])
         ;; TODO: This is messy, clean up once api and ss are merged
         ;; concepts
         api     (get-in dato [:api])
         ss      (get-in dato [:ss])
-        context (merge api {:ss ss})]
+        context (merge api {:ss ss} {:dato dato})]
     (go
       (loop []
         (alt!

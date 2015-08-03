@@ -1,8 +1,6 @@
 (ns dato.server
   (:require [compojure.core :refer [defroutes GET]]
             [compojure.route :as route]
-            [dato.datomic :as datod]
-            [dato.dev :as dev]
             [dato.lib.server :as dato]
             [environ.core :as config]
             [hiccup.core :as h]

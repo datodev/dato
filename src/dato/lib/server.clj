@@ -9,8 +9,8 @@
             [immutant.web.async :as async]
             [immutant.web.middleware :as imw]
             [immutant.codecs.transit :as it]
-            [dato.db.incoming :as incoming]
-            [dato.datomic :as datod])
+            [dato.lib.incoming :as incoming]
+            [dato.lib.datomic :as datod])
   (:import [java.net URI URLEncoder]
            [java.util UUID]))
 
@@ -33,11 +33,14 @@
                                                         (transit/write-handler (constantly "datascript/Datom")
                                                                                transit-rep)}))
 
+(defn ddb [dato-server]
+  (d/db ((:conn-fn dato-server))))
+
 (defn user-db
   "Currently a placeholder for a filtered-db with only datoms the
   given user is allowed to *read* (writing security is separate)8"
-  [user-db-id]
-  (datod/ddb))
+  [db session]
+  db)
 
 (defn ss-msg [event-name data]
   {:namespace :server
@@ -67,6 +70,12 @@
       @routes
       routes)))
 
+(defn session-db [session]
+  (let [server (session-server session)]
+    (def -session-db-session session)
+    (def -session-db-server server)
+    (ddb server)))
+
 (defn serializable-sessions [all]
   (reduce into (map (fn [[k v]] {k (dissoc v :live)}) all)))
 
@@ -85,9 +94,9 @@
             (assert (casync/put! tx-report-ch tx)
                     "Cant put transaction on tx-report-ch")))))))
 
-(defn broadcast-tx! [sessions tx-report]
+(defn broadcast-tx! [dato-server sessions tx-report]
   (def last-tx-report tx-report)
-  (let [data        (incoming/outgoing-tx-report (datod/ddb) tx-report)
+  (let [data        (incoming/outgoing-tx-report (d/db ((:conn-fn dato-server))) tx-report)
         _ (def last-tx-data data)
         payload     (ss-msg :server/database-transacted data)
         enc-payload (cdc/encode payload :transit)]
@@ -96,7 +105,7 @@
       (let [ch (get-in session [:live :ch])]
         (async/send! ch enc-payload)))))
 
-(defn start-tx-broadcast! [tx-mult]
+(defn start-tx-broadcast! [dato-server tx-mult]
   (let [stop-ch (casync/chan)
         tx-ch   (casync/chan)]
     (casync/tap tx-mult tx-ch)
@@ -105,7 +114,7 @@
         (casync/alt!
           tx-ch ([tx-report]
                  (println "TX-Broadcast Datoms:")
-                 (broadcast-tx! @all-sessions tx-report)
+                 (broadcast-tx! dato-server @all-sessions tx-report)
                  (recur))
           stop-ch ([]
                    (println "Exiting tx-broadcast go-loop")
@@ -128,14 +137,18 @@
        (reduce (fn [run entry]
                  (assoc run (:db/ident entry) entry)) {})))
 
-(defn on-open [dato-server ch]
+(defn on-open [dato-config ch]
   (let [oc               (async/originating-request ch)
         session          (:session oc)
         id               (:id session)
         others           @all-sessions
-        user-db-ids      (mapv :db/id (dsu/qes-by (datod/ddb) :user/email))
+        _                (def -last-config dato-config)
+        server           (if (var? (:server dato-config))
+                           @(:server dato-config)
+                           (:server dato-config))
+        user-db-ids      (mapv :db/id (dsu/qes-by (ddb server) :user/email))
         full-session     {:live            {:ch   ch
-                                            :dato dato-server}
+                                            :dato dato-config}
                           :id              id
                           :session/key     id
                           :session/user-id (rand-nth user-db-ids)}
@@ -164,7 +177,8 @@
 (defn on-message [ch msg]
   (let [oc               (async/originating-request ch)
         session          (:session oc)
-        routing-table    (session-routes session)
+        full-session     (dato-session session)
+        routing-table    (session-routes full-session)
         id               (:id session)
         my-ch            (get-in @all-sessions [id :live :ch])
         others           (dissoc @all-sessions id)
@@ -177,6 +191,7 @@
         _                (println "raw-incoming ffs: " (pr-str raw-incoming))
         _                (println "\t: " (pr-str [event] :handler))
         _                (println "Routes availabe in table: " (pr-str routing-table))
+        _                (def -last-session session)
         _                (println "\targs: " args)
         handler          (get-in routing-table [[event] :handler] default-handler)
         ;; temp hackishness
@@ -208,13 +223,12 @@
       (when (async/open? ch)
         (async/send! ch data)))))
 
-(defn bootstrap-user [session incoming context]
+(defn bootstrap-user [session _ _]
   (let [my-session-id (get-in @all-sessions [(:id session) :session/key])
         full-session  (dato-session session)
-        db            (user-db (:session/user-id session))
-        ;;ss (get-in full-session [:ss :])
+        db            (session-db full-session)
         server        (session-server session)
-        ss            (->> (session-routes session)
+        ss            (->> (session-routes full-session)
                            (filter (fn [[k v]] (= "ss" (namespace (first k)))))
                            (mapv (fn [[k v]] {(first k) (dissoc v :handler)}))
                            (reduce merge {}))]
@@ -241,7 +255,7 @@
 (defn r-pull [session [_ incoming] context]
   (let [p-name  (:name incoming)
         pattern (incoming/ensure-pull-required-fields (:pull incoming))
-        data    (d/pull (user-db (:user-id session))
+        data    (d/pull (session-db (dato-session session))
                         pattern
                         (:lookup incoming))]
     (ss-msg (keyword "server" (str (name p-name) "-succeeded"))
@@ -250,23 +264,35 @@
 (defn r-qes-by [session [_ incoming] context]
   (let [qes-name (:name incoming)
         data     (->> (if (:v incoming)
-                        (dsu/qes-by (user-db (:user-id session))
+                        (dsu/qes-by (session-db (dato-session session))
                                     (:a incoming)
                                     (:v incoming))
-                        (dsu/qes-by (user-db (:user-id session))
+                        (dsu/qes-by (session-db (dato-session session))
                                     (:a incoming)))
                       (mapv dsu/touch+))]
     (ss-msg (keyword "server" (str (name qes-name) "-succeeded"))
             {:results data})))
 
-(defn handle-transaction [session [_ incoming] context]
-  (def l-incoming incoming)
-  (let [conn         (datod/conn)
+
+
+
+(defn handle-transaction [session raw context]
+  (println "WTF handle-transaction: ")
+  (println "\t " session)
+  (println "\t " raw)
+  (def l-raw raw)
+  (let [[_ incoming] raw
+        _            (def l-incoming incoming)
+        full-session (dato-session session)
+        dato-server  (session-server full-session)
+        _            (def l-session session)
+        _            (def l-dato-server dato-server)
+        conn         ((:conn-fn dato-server))
         datoms       (:tx-data incoming)
         tx-guid      (:tx/guid incoming)
         meta         (assoc (:tx-meta incoming) :tx/guid tx-guid)
         fids         (:fids incoming)
-        db           (datod/ddb)
+        db           (ddb dato-server)
         full-session (dato-session session)
         user         (d/entity db (:session/user-id full-session))
         ]
@@ -279,7 +305,7 @@
       )))
 
 (def default-routing-table
-  {[:session/updated]   {:handler update-session}
+  {[:session/updated] {:handler update-session}
    [:ss/tx-requested] {:handler handle-transaction}
    [:ss/r-qes-by]     {:handler r-qes-by}
    [:ss/r-pull]       {:handler r-pull}
@@ -291,7 +317,7 @@
 (defn new-session-id []
   (str (UUID/randomUUID)))
 
-(defrecord DatoServer [routing-table])
+(defrecord DatoServer [routing-table conn-fn]  )
 
 (defn ?assign-id [handler dato-server]
   (fn [request]
@@ -303,17 +329,18 @@
                                  (assoc-in [:session :live :dato] dato-server)))]
       response)))
 
-(defn start! [handler dato-server & [port]]
-  (def iw-handler
-    (iw/run
-      (-> handler
-          ;;(ring-resource/wrap-resource "public")
-          (imw/wrap-websocket {:on-message (var on-message)
-                               :on-open    (partial on-open dato-server)
-                               :on-close   (var on-close)})
-          (?assign-id dato-server)
-          (imw/wrap-session))
-      {:path "/ws"
-       :host "0.0.0.0"}))
-  (setup-tx-report-ch (datod/conn))
-  (def stop-tx-broadcast-ch (start-tx-broadcast! tx-report-mult)))
+(defn start! [handler config]
+  (def -config config)
+  (let [dato-server (:server config)]
+    (def iw-handler
+      (iw/run
+        (-> handler
+            (imw/wrap-websocket {:on-message (var on-message)
+                                 :on-open    (partial on-open config)
+                                 :on-close   (var on-close)})
+            (?assign-id dato-server)
+            (imw/wrap-session))
+        {:path "/ws"
+         :host "0.0.0.0"}))
+    (setup-tx-report-ch ((:conn-fn @dato-server)))
+    (def stop-tx-broadcast-ch (start-tx-broadcast! dato-server tx-report-mult))))
