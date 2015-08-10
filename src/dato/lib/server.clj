@@ -96,11 +96,12 @@
 
 (defn broadcast-tx! [dato-server sessions tx-report]
   (def last-tx-report tx-report)
-  (let [data        (incoming/outgoing-tx-report (d/db ((:conn-fn dato-server))) tx-report)
-        _ (def last-tx-data data)
+  (def l-dato-server dato-server)
+  (def l-conn-fn (:conn-fn dato-server))
+  (let [data        (incoming/outgoing-tx-report (d/db ((:conn-fn @dato-server))) tx-report)
+        _           (def last-tx-data data)
         payload     (ss-msg :server/database-transacted data)
         enc-payload (cdc/encode payload :transit)]
-    
     (doseq [[_ session] sessions]
       (let [ch (get-in session [:live :ch])]
         (async/send! ch enc-payload)))))

@@ -1,6 +1,7 @@
 (ns dato.server
   (:require [compojure.core :refer [defroutes GET]]
             [compojure.route :as route]
+            [dato.datomic :as datod]
             [dato.lib.server :as dato]
             [environ.core :as config]
             [hiccup.core :as h]
@@ -68,11 +69,10 @@
                            [:ss/reverse] {:handler my-reverse}}))
 
 (def dato-server
-  (dato/map->DatoServer {:routing-table #'dato-routes}))
+  (dato/map->DatoServer {:routing-table #'dato-routes
+                         :conn-fn       datod/conn}))
 
 (defn run [& [port]]
-  (when is-dev?
-    (dev/start-figwheel!))
   (dato/start! handler {:server (var dato-server)
                         :port   8080})
   (run-web-server port))
