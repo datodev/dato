@@ -34,4 +34,5 @@
   (infof "Ensuring connection to default database")
   (infof "Connected to: %s" (conn))
   (infof "forwarding report-queue to tx-report-ch")
-    (setup-tx-report-ch (conn)))
+  ;;(setup-tx-report-ch (conn))
+  )

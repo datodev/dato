@@ -1,5 +1,6 @@
 (ns dato.datomic.schema
   (:require [dato.datomic :as datod]
+            [dato.datascript-utils :as dsu]
             [datomic.api :refer [db q] :as d]))
 
 (defn attribute [ident type & {:as opts}]
@@ -57,7 +58,7 @@
        :db/ident))
 
 (defn get-schema-ents [db]
-  (datod/touch-all '{:find [?t]
+  (dsu/touch-all '{:find [?t]
                    :where [[?t :db/ident ?ident]]}
                  db))
 
