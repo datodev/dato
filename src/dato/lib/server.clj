@@ -98,7 +98,7 @@
   (def last-tx-report tx-report)
   (def l-dato-server dato-server)
   (def l-conn-fn (:conn-fn dato-server))
-  (let [data        (incoming/outgoing-tx-report (d/db ((:conn-fn @dato-server))) tx-report)
+  (let [data        (incoming/outgoing-tx-report tx-report)
         _           (def last-tx-data data)
         payload     (ss-msg :server/database-transacted data)
         enc-payload (cdc/encode payload :transit)]

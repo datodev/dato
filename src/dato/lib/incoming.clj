@@ -134,9 +134,9 @@
 (def black-listed-attr-ns?
   #{"db"})
 
-(defn outgoing-tx-report [db tx-report]
+(defn outgoing-tx-report [tx-report]
   (def outgoing-tx tx-report)
-  (let [tx-guid             (when-let [datom (first (filter #(= (d/ident db (:a %)) :tx/guid) (:tx-data outgoing-tx)))]
+  (let [tx-guid             (when-let [datom (first (filter #(= (d/ident (:db-after tx-report) (:a %)) :tx/guid) (:tx-data outgoing-tx)))]
                               (:v datom))
         guid-map            (outgoing-guid-map tx-report)
         datoms              (for [{:keys [e a v tx added]} (:tx-data tx-report)]
