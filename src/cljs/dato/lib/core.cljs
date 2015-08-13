@@ -39,7 +39,7 @@
                   {:handlers
                    {goog.Uri                   (dato-transit/URIHandler.)
                     datascript.core/Datom      (dato-transit/DatomHandler.)
-                    datascript.btset/BTSetIter (transit/VectorHandler.) }}))
+                    datascript.btset/Iter (transit/VectorHandler.) }}))
 
 (defn tx-report->transaction [report]
   (mapv dsu/datom->transaction (:tx-data report)))

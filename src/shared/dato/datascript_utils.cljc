@@ -41,9 +41,9 @@
 (defn qe-by
   "Return single entity by attribute existence or specific value"
   ([db attr]
-    (qe '[:find ?e :in $ ?a :where [?e ?a]] db attr))
+   (qe '[:find ?e :in $ ?a :where [?e ?a]] db attr))
   ([db attr value]
-    (qe '[:find ?e :in $ ?a ?v :where [?e ?a ?v]] db attr value)))
+   (qe '[:find ?e :in $ ?a ?v :where [?e ?a ?v]] db attr value)))
 
 (defn qes-by
   "Return all entities by attribute existence or specific value"
@@ -51,6 +51,9 @@
     (qes '[:find ?e :in $ ?a :where [?e ?a]] db attr))
   ([db attr value]
     (qes '[:find ?e :in $ ?a ?v :where [?e ?a ?v]] db attr value)))
+
+(defn qe-gl [db guid]
+  (qe '[:find ?e :in $ ?a ?v :where [?e ?a ?v]] db :dato/guid guid))
 
 (defn val-by
   ([db attr]
