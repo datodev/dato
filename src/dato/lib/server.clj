@@ -33,8 +33,11 @@
                                                         (transit/write-handler (constantly "datascript/Datom")
                                                                                transit-rep)}))
 
+(defn dconn [dato-server]
+  (d/connect (:datomic-uri dato-server)))
+
 (defn ddb [dato-server]
-  (d/db ((:conn-fn dato-server))))
+  (d/db (dconn dato-server)))
 
 (defn user-db
   "Currently a placeholder for a filtered-db with only datoms the
@@ -96,11 +99,11 @@
 
 (defn broadcast-tx! [dato-server sessions tx-report]
   (def last-tx-report tx-report)
-  (let [data        (incoming/outgoing-tx-report (d/db ((:conn-fn dato-server))) tx-report)
-        _ (def last-tx-data data)
+  (def l-dato-server dato-server)
+  (let [data        (incoming/outgoing-tx-report tx-report)
+        _           (def last-tx-data data)
         payload     (ss-msg :server/database-transacted data)
         enc-payload (cdc/encode payload :transit)]
-    
     (doseq [[_ session] sessions]
       (let [ch (get-in session [:live :ch])]
         (async/send! ch enc-payload)))))
@@ -287,7 +290,7 @@
         dato-server  (session-server full-session)
         _            (def l-session session)
         _            (def l-dato-server dato-server)
-        conn         ((:conn-fn dato-server))
+        conn         (dconn dato-server)
         datoms       (:tx-data incoming)
         tx-guid      (:tx/guid incoming)
         meta         (assoc (:tx-meta incoming) :tx/guid tx-guid)
@@ -317,7 +320,7 @@
 (defn new-session-id []
   (str (UUID/randomUUID)))
 
-(defrecord DatoServer [routing-table conn-fn]  )
+(defrecord DatoServer [routing-table datomic-uri]  )
 
 (defn ?assign-id [handler dato-server]
   (fn [request]
@@ -342,5 +345,5 @@
             (imw/wrap-session))
         {:path "/ws"
          :host "0.0.0.0"}))
-    (setup-tx-report-ch ((:conn-fn @dato-server)))
+    (setup-tx-report-ch (dconn @dato-server))
     (def stop-tx-broadcast-ch (start-tx-broadcast! dato-server tx-report-mult))))

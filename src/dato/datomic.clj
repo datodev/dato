@@ -32,7 +32,4 @@
   (infof "Creating default database if it doesn't exist: %s"
          (d/create-database default-uri))
   (infof "Ensuring connection to default database")
-  (infof "Connected to: %s" (conn))
-  (infof "forwarding report-queue to tx-report-ch")
-  ;;(setup-tx-report-ch (conn))
-  )
+  (infof "Connected to: %s" (conn)))
