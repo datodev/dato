@@ -6,7 +6,7 @@
                           [refactor-nrepl "1.0.5" :exclusions [org.clojure/clojure org.clojure/tools.nrepl]]]
 
            :dependencies [[com.cemerick/piggieback "0.2.1" :exclusions [org.clojure/clojure org.clojure/clojurescript org.clojure/tools.nrepl]]
-                          [figwheel-sidecar "0.3.3" :exclusions [org.clojure/clojure commons-codec org.clojure/clojurescript org.clojure/tools.reader]]
+                          [figwheel-sidecar "0.3.3" :exclusions [org.clojure/clojure commons-codec org.clojure/clojurescript org.clojure/tools.reader org.codehaus.plexus/plexus-utils org.clojure/tools.namespace medley clout compojure]]
                           [org.clojure/tools.nrepl "0.2.10"]
                           [weasel "0.7.0-SNAPSHOT" :exclusions [http-kit org.clojure/clojurescript]]]
 

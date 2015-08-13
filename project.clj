@@ -11,15 +11,22 @@
   :plugins [[lein-cljsbuild "1.0.6" :exclusions [org.clojure/clojurescript]]
             [lein-environ "1.0.0"]]
 
+  :pedantic? :abort
+
   :exclusions [[org.clojure/clojure]
                [org.clojure/clojurescript]
-               org.clojure/clojurescript org.clojure/clojure]
+               [org.slf4j/log4j-over-slf4j]]
 
-  :dependencies [;; Chrome extension for cljs dev
+  :dependencies [ ;; Chrome extension for cljs dev
                  [binaryage/devtools "0.3.0"]
-                 [cheshire "5.5.0"]
+                 [cheshire "5.5.0" :exclusions [com.fasterxml.jackson.core/jackson-core]]
                  [clj-http "1.1.2" :exclusions [com.fasterxml.jackson.dataformat/jackson-dataformat-smile com.fasterxml.jackson.core/jackson-core]]
-                 [clj-pdf "2.0.9"]
+
+                 ;; Internal conflict with xml-apis versions, be sure to update both when you
+                 ;; update clj-pdf
+                 [clj-pdf "2.1.0" :exclusions [xml-apis]]
+                 [xml-apis "1.3.04"]
+
                  [cljsjs/react "0.12.2-8"]
                  [com.cognitect/transit-clj "0.8.275" :exclusions [com.fasterxml.jackson.core/jackson-core]]
                  [com.cognitect/transit-cljs "0.8.220" :exclusions [org.clojure/clojurescript]]
@@ -43,8 +50,16 @@
                  [org.clojure/test.check "0.7.0"]
                  [org.clojure/tools.logging "0.2.6"]
                  [org.clojure/tools.reader "0.10.0-alpha1"]
-                 [org.immutant/immutant "2.0.1" :exclusions [org.clojure/clojure org.clojure/tools.reader org.clojure/clojurescript]]
-                 [org.immutant/immutant-transit "0.2.2"]
+                 [org.immutant/web "2.0.2" :exclusions [org.clojure/clojure
+                                                        org.clojure/tools.reader
+                                                        org.clojure/clojurescript
+                                                        org.jboss.logging/jboss-logging
+                                                        org.slf4j/slf4j-nop
+                                                        org.slf4j/slf4j-api
+                                                        org.slf4j/slf4j-simple
+                                                        org.slf4j/slf4j-log4j12
+                                                        ch.qos.logback/logback-classic]]
+                 [org.immutant/immutant-transit "0.2.3" :exclusions [com.fasterxml.jackson.core/jackson-core]]
                  [org.postgresql/postgresql "9.3-1102-jdbc41"]
                  [org.postgresql/postgresql "9.3-1102-jdbc41"]
                  [org.slf4j/slf4j-api "1.6.2"]
