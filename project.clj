@@ -49,6 +49,10 @@
                  [org.clojure/google-closure-library-third-party "0.0-20150505-021ed5b3"]
                  [org.clojure/test.check "0.7.0"]
                  [org.clojure/tools.logging "0.2.6"]
+                 [log4j "1.2.17"]
+                 [log4j/apache-log4j-extras "1.1"]
+                 [org.slf4j/slf4j-api "1.7.10"]
+                 [org.slf4j/slf4j-log4j12 "1.7.10" :exclusions [log4j]]
                  [org.clojure/tools.reader "0.10.0-alpha1"]
                  [org.immutant/web "2.0.2" :exclusions [org.clojure/clojure
                                                         org.clojure/tools.reader
@@ -62,8 +66,6 @@
                  [org.immutant/immutant-transit "0.2.3" :exclusions [com.fasterxml.jackson.core/jackson-core]]
                  [org.postgresql/postgresql "9.3-1102-jdbc41"]
                  [org.postgresql/postgresql "9.3-1102-jdbc41"]
-                 [org.slf4j/slf4j-api "1.6.2"]
-                 [org.slf4j/slf4j-log4j12 "1.6.2" :exclusions [log4j/log4j]]
                  [pdfboxing "0.1.5" :exclusions [log4j/log4j]]
                  [precursor/om-i "0.1.7"]
                  [prismatic/om-tools "0.3.11" :exclusions [om]]
