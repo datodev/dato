@@ -5,7 +5,7 @@
 
   :license {:name "Eclipse Public License"
             :url  "http://www.eclipse.org/legal/epl-v10.html"}
-  
+
   :repositories {"my.datomic.com" {:url   "https://my.datomic.com/repo"
                                    :creds :gpg}}
   :plugins [[lein-cljsbuild "1.0.6" :exclusions [org.clojure/clojurescript]]
@@ -56,7 +56,8 @@
                  [racehub/om-bootstrap "0.5.1"]
                  [ring "1.3.2"]
                  [ring/ring-defaults "0.1.3"]
-                 [sablono "0.3.4"]]
+                 [sablono "0.3.4"]
+                 [org.clojure/tools.nrepl "0.2.10"]]
 
   :cljsbuild {:test-commands {"test" ["phantomjs" "env/test/js/unit-test.js" "env/test/unit-test.html"]}
               :builds        [{:id           "dev"
@@ -93,8 +94,8 @@
                                               :externs       ["react/externs/react.js"]
                                               :warnings      {:single-segment-namespace false}}
                                :jar true}]}
-  
-  :main ^:skip-aot dato.core
+
+  :main ^:skip-aot dato.init
 
   :source-paths ["src/" "src/shared/" "yaks/datascript/src" "yaks/datascript/bench/src"]
 
