@@ -12,7 +12,8 @@
   "datomic:sql://dato?jdbc:postgresql://my-remote-server.com:5432/dato?user=production_dato&password=datolovesyou")
 
 (def local-uri
-  "datomic:sql://dato_dev?jdbc:postgresql://127.0.0.1:5432/dato_dev?user=dev_dato&password=datostilllovesyou")
+  (or (config/env :datomic-local-uri)
+      "datomic:sql://dato_dev?jdbc:postgresql://127.0.0.1:5432/dato_dev?user=dev_dato&password=datostilllovesyou"))
 
 (def default-uri
   (if (config/env :is-dev)

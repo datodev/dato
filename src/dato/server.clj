@@ -72,10 +72,15 @@
   (dato/map->DatoServer {:routing-table #'dato-routes
                          :datomic-uri   datod/default-uri}))
 
+(defn dato-port []
+  (if (config/env :dato-port)
+    (Integer/parseInt (config/env :dato-port))
+    8080))
+
 (defn run [& [port]]
   (dato/start! handler {:server (var dato-server)
-                        :port   8080})
+                        :port   (dato-port)})
   (run-web-server port))
 
-(defn -main [& [port]]
-  (run port))
+(defn init []
+  (run))
