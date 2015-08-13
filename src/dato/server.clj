@@ -70,7 +70,7 @@
 
 (def dato-server
   (dato/map->DatoServer {:routing-table #'dato-routes
-                         :conn-fn       datod/conn}))
+                         :datomic-uri   datod/default-uri}))
 
 (defn run [& [port]]
   (dato/start! handler {:server (var dato-server)
