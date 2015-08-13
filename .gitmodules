@@ -1,0 +1,3 @@
+[submodule "yaks/datascript"]
+	path = yaks/datascript
+	url = git@github.com:sgrove/datascript.git
