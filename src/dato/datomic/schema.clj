@@ -1,6 +1,6 @@
 (ns dato.datomic.schema
-  (:require [dato.datomic :as datod]
-            [dato.datascript-utils :as dsu]
+  (:require [dato.datascript-utils :as dsu]
+            [dato.datomic :as datod]
             [datomic.api :refer [db q] :as d]))
 
 (defn attribute [ident type & {:as opts}]

@@ -20,7 +20,12 @@
    :summon/session        {:db/valueType :db.type/ref}})
 
 (defn enum [db db-id]
-  (:db/ident (d/entity db db-id)))
+  ;; Try to support both straight db-id and {:db/id db-id}.
+  ;; Messy, but seems to be a common mistake
+  (:db/ident (d/entity db (get db-id :db/id db-id))))
+
+(defn enum-id [db enum]
+  (dsu/q1-by db :db/ident enum))
 
 ;; Could probably speed this up with a few different conditionals
 ;; (compare db/ids directly if they're both number/map)
@@ -134,7 +139,8 @@
 (defn prep-broadcastable-tx-report [tx-report]
   (let [fids    (fid-map tx-report)
         tx-guid (d/squuid)]
-    (def l-tx-report)
+    (assert (every? identity (vals fids)) (str "Missing fid value in " (pr-str fids)))
+    (def l-tx-report tx-report)
     ;; We're broadcasting this, so we need to track the fids for the
     ;; lifetime of this db
     (def tx-fids fids)
