@@ -24,7 +24,8 @@
 
 (def schema-1
    ;; Universal attributes
-  [(attribute :dato/guid :db.type/uuid :db/unique :db.unique/identity)
+  [(attribute :migration/version :db.type/long)
+   (attribute :dato/guid :db.type/uuid :db/unique :db.unique/identity)
    (attribute :tx/guid :db.type/uuid :db/unique :db.unique/identity)])
 
 (def schema-2
