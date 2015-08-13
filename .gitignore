@@ -17,3 +17,4 @@ resources/public/js/bin-debug
 resources/public/js/bin
 resources/public/cljs
 
+/figwheel_server.log
