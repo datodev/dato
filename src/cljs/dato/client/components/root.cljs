@@ -37,22 +37,22 @@
   (display-name [_]
     "TodoMVC")
   (did-mount [_]
-    (d/listen! (dato/db (om/get-shared owner :dato)) :dato-root #(om/refresh! owner)))
+    (d/listen! (dato/conn (om/get-shared owner :dato)) :dato-root #(om/refresh! owner)))
   (will-unmount [_]
-    (d/unlisten! (dato/db (om/get-shared owner :dato)) :dato-root))
+    (d/unlisten! (dato/conn (om/get-shared owner :dato)) :dato-root))
   (render [_]
     (html
      (let [{:keys [dato]}   (om/get-shared owner)
-           db               (:db dato)
+           db               (dato/db dato)
            transact!        (partial dato/transact! dato)
-           me               (dato/me @db)
-           session          (dato/local-session @db)
+           me               (dato/me db)
+           session          (dato/local-session db)
            task-filter      (:session/task-filter session)
            pred             (case task-filter
                               :completed :task/completed?
                               :active    (complement :task/completed?)
                               (constantly true))
-           all-tasks        (dsu/qes-by @db :task/title)
+           all-tasks        (dsu/qes-by db :task/title)
            grouped          (group-by :task/completed? all-tasks)
            active-tasks     (get grouped false)
            completed-tasks  (get grouped true)
