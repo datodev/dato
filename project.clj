@@ -5,21 +5,28 @@
 
   :license {:name "Eclipse Public License"
             :url  "http://www.eclipse.org/legal/epl-v10.html"}
-  
+
   :repositories {"my.datomic.com" {:url   "https://my.datomic.com/repo"
                                    :creds :gpg}}
   :plugins [[lein-cljsbuild "1.0.6" :exclusions [org.clojure/clojurescript]]
             [lein-environ "1.0.0"]]
 
+  :pedantic? :abort
+
   :exclusions [[org.clojure/clojure]
                [org.clojure/clojurescript]
-               org.clojure/clojurescript org.clojure/clojure]
+               [org.slf4j/log4j-over-slf4j]]
 
-  :dependencies [;; Chrome extension for cljs dev
+  :dependencies [ ;; Chrome extension for cljs dev
                  [binaryage/devtools "0.3.0"]
-                 [cheshire "5.5.0"]
+                 [cheshire "5.5.0" :exclusions [com.fasterxml.jackson.core/jackson-core]]
                  [clj-http "1.1.2" :exclusions [com.fasterxml.jackson.dataformat/jackson-dataformat-smile com.fasterxml.jackson.core/jackson-core]]
-                 [clj-pdf "2.0.9"]
+
+                 ;; Internal conflict with xml-apis versions, be sure to update both when you
+                 ;; update clj-pdf
+                 [clj-pdf "2.1.0" :exclusions [xml-apis]]
+                 [xml-apis "1.3.04"]
+
                  [cljsjs/react "0.12.2-8"]
                  [com.cognitect/transit-clj "0.8.275" :exclusions [com.fasterxml.jackson.core/jackson-core]]
                  [com.cognitect/transit-cljs "0.8.220" :exclusions [org.clojure/clojurescript]]
@@ -42,13 +49,23 @@
                  [org.clojure/google-closure-library-third-party "0.0-20150505-021ed5b3"]
                  [org.clojure/test.check "0.7.0"]
                  [org.clojure/tools.logging "0.2.6"]
+                 [log4j "1.2.17"]
+                 [log4j/apache-log4j-extras "1.1"]
+                 [org.slf4j/slf4j-api "1.7.10"]
+                 [org.slf4j/slf4j-log4j12 "1.7.10" :exclusions [log4j]]
                  [org.clojure/tools.reader "0.10.0-alpha1"]
-                 [org.immutant/immutant "2.0.1" :exclusions [org.clojure/clojure org.clojure/tools.reader org.clojure/clojurescript]]
-                 [org.immutant/immutant-transit "0.2.2"]
+                 [org.immutant/web "2.0.2" :exclusions [org.clojure/clojure
+                                                        org.clojure/tools.reader
+                                                        org.clojure/clojurescript
+                                                        org.jboss.logging/jboss-logging
+                                                        org.slf4j/slf4j-nop
+                                                        org.slf4j/slf4j-api
+                                                        org.slf4j/slf4j-simple
+                                                        org.slf4j/slf4j-log4j12
+                                                        ch.qos.logback/logback-classic]]
+                 [org.immutant/immutant-transit "0.2.3" :exclusions [com.fasterxml.jackson.core/jackson-core]]
                  [org.postgresql/postgresql "9.3-1102-jdbc41"]
                  [org.postgresql/postgresql "9.3-1102-jdbc41"]
-                 [org.slf4j/slf4j-api "1.6.2"]
-                 [org.slf4j/slf4j-log4j12 "1.6.2" :exclusions [log4j/log4j]]
                  [pdfboxing "0.1.5" :exclusions [log4j/log4j]]
                  [precursor/om-i "0.1.7"]
                  [prismatic/om-tools "0.3.11" :exclusions [om]]
@@ -56,7 +73,8 @@
                  [racehub/om-bootstrap "0.5.1"]
                  [ring "1.3.2"]
                  [ring/ring-defaults "0.1.3"]
-                 [sablono "0.3.4"]]
+                 [sablono "0.3.4"]
+                 [org.clojure/tools.nrepl "0.2.10"]]
 
   :cljsbuild {:test-commands {"test" ["phantomjs" "env/test/js/unit-test.js" "env/test/unit-test.html"]}
               :builds        [{:id           "dev"
@@ -93,8 +111,8 @@
                                               :externs       ["react/externs/react.js"]
                                               :warnings      {:single-segment-namespace false}}
                                :jar true}]}
-  
-  :main ^:skip-aot dato.core
+
+  :main ^:skip-aot dato.init
 
   :source-paths ["src/" "src/shared/" "yaks/datascript/src" "yaks/datascript/bench/src"]
 

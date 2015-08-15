@@ -30,7 +30,7 @@
   (let [container (sel1 root-node "div.app-instance")
         dato      (:dato @state)
         dato-ch   (get-in dato [:comms :dato])
-        conn      (get-in dato [:db])]
+        conn      (get-in dato [:conn])]
     (om/root com-root/root-com state
              {:target     container
               :shared     {:dato dato}
@@ -69,3 +69,6 @@
                         (js/console.log "Reloading from figwheel..")))
     (weasel/connect "ws://localhost:9001" :verbose true :print #{:repl :console})
     true))
+
+(defn ^:export inspect-state []
+  (clj->js @app-state))
