@@ -160,7 +160,8 @@
                                (js/console.log "cast!")
                                (cast! {:event :db/updated
                                        :data  {:intent intent
-                                               :tx     (with-meta tx (merge meta {:tx/cb cb}))}})))
+                                               ;; TODO: Decide on where the cb goes, and stick to it.
+                                               :tx     (with-meta tx (merge meta {:tx/cb (or cb (:tx/cb meta))}))}})))
                 :cast!      cast!
                 :broadcast! (fn broadcast!
                               ([event]

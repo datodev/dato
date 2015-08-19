@@ -88,6 +88,25 @@
                                                    (callback tx-report)
                                                    (remove-attribute-listener conn attribute key))))))
 
+(defn refresh-on! [owner conn listen-kvs]
+  (doseq [listen-trigger listen-kvs]
+    (let [[trigger-type trigger] listen-trigger
+          add-trigger-fn         (case trigger-type
+                                   :attr add-attribute-listener
+                                   :eid  add-entity-listener)
+          remove-trigger-fn      (case trigger-type
+                                   :attr remove-attribute-listener
+                                   :eid  remove-entity-listener)]
+      (om/update-state-nr! owner
+                           (fn [s]
+                             (update-in s [::listener-keys listen-trigger]
+                                        #(or % (.getNextUniqueId (.getInstance IdGenerator))))))
+      (let [key (om/get-state owner [::listener-key listen-trigger])]
+        (add-trigger-fn conn trigger key (fn [tx-report]
+                                           (if (om/mounted? owner)
+                                             (om/refresh! owner)
+                                             (remove-trigger-fn conn trigger key))))))))
+
 (defn datom->tx [datom fids]
   (let [[e a v d added?] datom]
     [(if added?
