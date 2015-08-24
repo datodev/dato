@@ -159,7 +159,7 @@
 (defn prep-broadcastable-tx-report [tx-report]
   (let [fids    (fid-map tx-report)
         tx-guid (d/squuid)]
-    (assert (every? identity (vals fids)) (str "Missing fid value in " (pr-str fids)))
+    (assert (every? identity (vals fids)) (str "Missing guid value in broadcast tx-report: " (pr-str fids) " - did you forget to add a :dato/guid to a new entity?"))
     (def l-tx-report tx-report)
     ;; We're broadcasting this, so we need to track the fids for the
     ;; lifetime of this db
