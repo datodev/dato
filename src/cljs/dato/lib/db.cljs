@@ -22,7 +22,8 @@
 (defn enum [db db-id]
   ;; Try to support both straight db-id and {:db/id db-id}.
   ;; Messy, but seems to be a common mistake
-  (:db/ident (d/entity db (get db-id :db/id db-id))))
+  (when-let [eid (get db-id :db/id db-id)]
+    (:db/ident (d/entity db eid))))
 
 (defn enum-id [db enum]
   (dsu/q1-by db :db/ident enum))
