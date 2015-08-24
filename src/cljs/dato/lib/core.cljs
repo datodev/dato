@@ -299,14 +299,16 @@
 (defn ss [dato]
   @(:ss dato))
 
-(defn start-loop! [dato]
+(defn start-loop! [dato additional-context]
   (let [dato-ch (get-in dato [:comms :dato])
         conn    (get-in dato [:conn])
         ;; TODO: This is messy, clean up once api and ss are merged
         ;; concepts
         api     (get-in dato [:api])
         ss      (get-in dato [:ss])
-        context (merge api {:ss ss} {:dato dato})]
+        ;; User's additional-context isn't able to override the
+        ;; dato-provided context, to prevent confusion
+        context (merge additional-context api {:ss ss} {:dato dato})]
     (go
       (loop []
         (alt!
