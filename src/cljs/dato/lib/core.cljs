@@ -8,6 +8,7 @@
             [dato.lib.websockets :as ws]
             [dato.lib.db :as db]
             [dato.lib.transit :as dato-transit]
+            [om.core :as om]
             [goog.Uri])
   (:require-macros [cljs.core.async.macros :as async :refer [alt! go go-loop]])
   (:import [goog Uri]))
@@ -68,7 +69,7 @@
                                                                                                        ;; Should we just pass the whole payload through, or just the data/resultts?
                                                                                                        (cond
                                                                                                          (chan? cb-or-ch) (put! cb-or-ch (:data data))
-                                                                                                         (fn? cb-or-ch)   (cb (:data data))
+                                                                                                         (fn? cb-or-ch)   (cb-or-ch (:data data))
                                                                                                          :else            nil))
                                                                                                      (ss-cast! data)))))
                                                                           (.readAsText fr (.-data event))))
@@ -92,6 +93,8 @@
                                   (put! dato-ch payload))
                                 (js/console.log "Not yet bootstrapped, ignoring cast"))
                               true))
+        history            (atom {:current-path nil
+                                  :log          []})
         ss-data            (atom {})
         ss-api             (atom {})
         ;; ???: Do the perf implications of anonymous functions mean these
@@ -130,6 +133,7 @@
                  ([conn] @(conn)))
      ::ss-dato ss-data
      :ss       ss-api
+     :history  history
      ;; TODO: The individual ss api functions below should be moved
      ;; into the bootstrapped :ss key. The multiple-arities and
      ;; pre-checks makes it difficult though. Need to think about how
@@ -300,22 +304,35 @@
   @(:ss dato))
 
 (defn start-loop! [dato additional-context]
-  (let [dato-ch (get-in dato [:comms :dato])
-        conn    (get-in dato [:conn])
+  (let [dato-ch         (get-in dato [:comms :dato])
+        conn            (get-in dato [:conn])
         ;; TODO: This is messy, clean up once api and ss are merged
         ;; concepts
-        api     (get-in dato [:api])
-        ss      (get-in dato [:ss])
+        api             (get-in dato [:api])
+        ss              (get-in dato [:ss])
+        history         (get-in dato [:history])
         ;; User's additional-context isn't able to override the
         ;; dato-provided context, to prevent confusion
-        context (merge additional-context api {:ss ss} {:dato dato})]
+        context         (merge additional-context api {:dato dato
+                                                       :ss   ss})
+        update-history! (fn [tx-report]
+                          (swap! history update-in [:log] conj {:tx/intent     (get-in tx-report [:tx-meta :tx/intent])
+                                                                :time          (js/Date.)
+                                                                :tx            tx-report
+                                                                :tx/transient? (get-in tx-report [:tx-meta :tx/transient?])}))]
+    ;; XXX: Uneasy with:
+    ;; 1. Hard-coding history-listener here (what about other plugins?)
+    ;; 2. Transactions needing history-listener-specific metadata (plugging it in now becomes difficult)
+    (d/listen!
+     conn
+     key
+     update-history!)
     (go
       (loop []
         (alt!
           dato-ch ([{:keys [sender event data] :as payload}]
                    (cond
-                     ;; Special-case waiting on https://github.com/tonsky/datascript/issues/76 and
-                     ;; https://github.com/tonsky/datascript/issues/99
+                     ;; Special-case waiting on https://github.com/tonsky/datascript/issues/76
                      ;; Can eliminate this branch afterwards
                      (= :server/database-transacted event)
                      (let [previous-state @conn]
@@ -328,13 +345,43 @@
                      :else
                      (let [previous-state @conn
                            tx-data        (con/transition @conn payload)
-                           tx-meta        (meta tx-data)]
+                           tx-meta        (meta tx-data)
+                           full-tx-meta   (-> (if tx-meta
+                                                tx-meta
+                                                {:tx/transient? true})
+                                              (update-in [:tx/intent] (fn [intent]
+                                                                        (or intent event))))]
                        (js/console.log "dato-keys: " (pr-str (keys payload)))
                        (js/console.log "\tevent: " (pr-str event))
                        (js/console.log "\ttx-data: " (pr-str tx-data))
-                       (when tx-data
-                         (d/transact! conn tx-data (if tx-meta
-                                                     tx-meta
-                                                     {:transient? true})))
+                       (js/console.log "\ttx-meta: " (pr-str full-tx-meta))
+                       (if tx-data
+                         (do
+                           (js/console.log "Transacting into: " conn)
+                           (d/transact! conn tx-data full-tx-meta))
+                         (update-history! {:tx-meta full-tx-meta}))
                        (con/effect! context previous-state @conn payload)))
                    (recur)))))))
+
+;; Component stuff
+
+(defn dato-node-id [owner]
+  (js/Math.abs (hash (aget owner "_rootNodeID"))))
+
+(defn get-state [owner]
+  (let [db  (db (om/get-shared owner [:dato]))
+        eid (dato-node-id owner)]
+    (d/entity db eid)))
+
+(defn set-state! [owner map]
+  (let [conn   (conn (om/get-shared owner [:dato]))
+        eid    (dato-node-id owner)
+        entity (merge {:db/id eid} map)]
+    (d/transact conn [entity])))
+
+(defn unmount! [owner]
+  (let [conn (conn (om/get-shared owner [:dato]))
+        eid  (dato-node-id owner)]
+    ;; XXX Unclear about this, but this mimics React's default state
+    ;; behavior on unmounts
+    (d/transact conn [[:db.fn/retractEntity eid]])))
