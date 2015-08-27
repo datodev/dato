@@ -39,6 +39,19 @@
                                (enum db (:db/id b))))]
     (= a b)))
 
+;; TODO: Listeners should be a function of dato
+(defn invalidate-all-listeners! [dato]
+  (let [db    (:conn dato)
+        eids  (keys (get-in @listeners [db :entity-listeners]))
+        attrs (keys (get-in @listeners [db :attribute-listeners]))]
+    (doseq [eid eids
+            [k callback] (get-in @listeners [db :entity-listeners])]
+      (callback {}))
+    (doseq [attr attrs
+            [k callback] (get-in @listeners [db :attribute-listeners])]
+      (println k)
+      (callback {}))))
+
 (defn handle-callbacks [db tx-report]
   (let [[eids attrs] (reduce (fn [[eids attrs] datom]
                                [(conj eids (:e datom))
