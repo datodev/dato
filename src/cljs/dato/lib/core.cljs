@@ -57,14 +57,11 @@
         ws                 (ws/build dato-host dato-path {:on-open    (fn [event] (js/console.log ":on-open :" event))
                                                           :on-close   (fn [event] (js/console.log ":on-close :" event))
                                                           :on-message (fn [event]
-                                                                        (js/console.log "Bla: " event)
                                                                         (let [fr (js/FileReader. (.-data event))]
                                                                           (aset fr "onloadend" (fn [e]
                                                                                                  (let [data (transit/read transit-reader (.. e -target -result))]
-                                                                                                   (js/console.log "Bla 2: " data " pending: " pending-rpc)
                                                                                                    (if-let [cb-id (:server/rpc-id data)]
                                                                                                      (let [cb-or-ch (get @pending-rpc cb-id)]
-                                                                                                       (js/console.log "pending-rpc: " @pending-rpc)
                                                                                                        (swap! pending-rpc dissoc cb-id)
                                                                                                        ;; Should we just pass the whole payload through, or just the data/resultts?
                                                                                                        (cond
@@ -75,7 +72,6 @@
                                                                           (.readAsText fr (.-data event))))
                                                           :on-error   (fn [event] (js/console.log ":on-error :" event))})
         dato-send!         (fn [event data]
-                             (js/console.log "dato-send! " (pr-str event) (pr-str data))
                              (.send ws (transit/write transit-writer [event data])))
         controls-ch        (async/chan)
         comms              {:controls controls-ch
@@ -161,7 +157,6 @@
                               ([intent tx meta]
                                (transact! intent tx meta nil))
                               ([intent tx meta cb]
-                               (js/console.log "cast!")
                                (cast! {:event :db/updated
                                        :data  {:intent intent
                                                ;; TODO: Decide on where the cb goes, and stick to it.
@@ -227,12 +222,12 @@
                                              ;; Check if we're reloading
                                              ;; with a pre-existing db
                                              (when-not bootstrapped?
-                                               (js/console.log (pr-str schema))
-                                               (js/console.log (pr-str (vals schema)))
+                                               ;;(js/console.log (pr-str schema))
+                                               ;;(js/console.log (pr-str (vals schema)))
                                                ;;(js/console.log "conn: " (pr-str conn))
                                                (remove-watch app-db :global-listener)
                                                (reset! app-db @conn)
-                                               (js/console.log "me")
+                                               ;;(js/console.log "me")
                                                (doto app-db
                                                  (db/setup-listener! :global-listener))
                                                (d/listen! app-db :server-tx-report
@@ -241,12 +236,9 @@
                                                               (js/console.log "Listened TX: " tx-report)
                                                               (when (or (get-in tx-report [:tx-meta :tx/broadcast?])
                                                                         (get-in tx-report [:tx-meta :tx/persist?]))
-                                                                (js/console.log "Prep that shit!")
                                                                 (let [prepped (db/prep-broadcastable-tx-report tx-report)]
                                                                   (when @network-enabled?
-                                                                    (js/console.log "Send that tx-shit!")
                                                                     (dato-send! :ss/tx-requested prepped)))))))
-                                               (js/console.log "too: " (pr-str (type app-db)))
                                                (let [local-session-id (d/tempid :db.part/user)]
                                                  (d/transact! app-db (vals schema))
                                                  (d/transact! app-db [{:db/id                 (d/tempid :db.part/user)
@@ -254,10 +246,8 @@
                                                                       ;; TODO: This can likely be moved out to a user-land handler
                                                                       (assoc (:session data) :db/id local-session-id)
                                                                       {:local/current-session {:db/id local-session-id}}]))
-                                               (js/console.log "app-db: " app-db)
                                                (reset! cast-bootstrapped? true))
                                              conn)]
-                                    (js/console.log "Something")
                                     (put! dato-ch [:dato/bootstrap-succeeded session-id])
                                     (loop []
                                       (let [msg (<! ws-ch)]
@@ -267,7 +257,6 @@
 
 ;; TODO: Probably convert to cljs Record to reify this stuff + avoid the apply shortcut
 (defn bootstrap! [dato & args]
-  (js/console.log "bootstrap!")
   (apply (get-in dato [:api :bootstrap!]) args))
 
 (defn db [dato]
