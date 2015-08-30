@@ -1,7 +1,6 @@
 (ns ^:figwheel-always dato.lib.db
     (:require [clojure.set :as sets]
               [datascript :as d]
-              [fipp.edn :as fipp]
               [dato.datascript-utils :as dsu]
               [dato.client.utils.seq :refer [dissoc-in]]
               [om.core :as om])
