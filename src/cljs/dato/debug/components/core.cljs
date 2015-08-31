@@ -71,6 +71,9 @@
 
 (defn history-com [data owner opts]
   (reify
+    om/IDisplayName
+    (display-name [_]
+      "DatoDebuggerContainer")
     om/IWillMount
     (will-mount [_]
       (om/set-state! owner [:current-save-slot] 0)
