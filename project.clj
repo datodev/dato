@@ -36,7 +36,6 @@
                  [compojure "1.3.1"]
                  ;;[datascript "0.11.6"]
                  [environ "1.0.0"]
-                 [fipp "0.6.2"]
                  [hiccup "1.0.5"]
                  [instaparse "1.4.0"]
                  [markdown-clj "0.9.66"]

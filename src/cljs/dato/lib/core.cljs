@@ -8,6 +8,7 @@
             [dato.lib.websockets :as ws]
             [dato.lib.db :as db]
             [dato.lib.transit :as dato-transit]
+            [om.core :as om]
             [goog.Uri])
   (:require-macros [cljs.core.async.macros :as async :refer [alt! go go-loop]])
   (:import [goog Uri]))
@@ -56,25 +57,21 @@
         ws                 (ws/build dato-host dato-path {:on-open    (fn [event] (js/console.log ":on-open :" event))
                                                           :on-close   (fn [event] (js/console.log ":on-close :" event))
                                                           :on-message (fn [event]
-                                                                        (js/console.log "Bla: " event)
                                                                         (let [fr (js/FileReader. (.-data event))]
                                                                           (aset fr "onloadend" (fn [e]
                                                                                                  (let [data (transit/read transit-reader (.. e -target -result))]
-                                                                                                   (js/console.log "Bla 2: " data " pending: " pending-rpc)
                                                                                                    (if-let [cb-id (:server/rpc-id data)]
                                                                                                      (let [cb-or-ch (get @pending-rpc cb-id)]
-                                                                                                       (js/console.log "pending-rpc: " @pending-rpc)
                                                                                                        (swap! pending-rpc dissoc cb-id)
                                                                                                        ;; Should we just pass the whole payload through, or just the data/resultts?
                                                                                                        (cond
                                                                                                          (chan? cb-or-ch) (put! cb-or-ch (:data data))
-                                                                                                         (fn? cb-or-ch)   (cb (:data data))
+                                                                                                         (fn? cb-or-ch)   (cb-or-ch (:data data))
                                                                                                          :else            nil))
                                                                                                      (ss-cast! data)))))
                                                                           (.readAsText fr (.-data event))))
                                                           :on-error   (fn [event] (js/console.log ":on-error :" event))})
         dato-send!         (fn [event data]
-                             (js/console.log "dato-send! " (pr-str event) (pr-str data))
                              (.send ws (transit/write transit-writer [event data])))
         controls-ch        (async/chan)
         comms              {:controls controls-ch
@@ -92,6 +89,8 @@
                                   (put! dato-ch payload))
                                 (js/console.log "Not yet bootstrapped, ignoring cast"))
                               true))
+        history            (atom {:current-path nil
+                                  :log          []})
         ss-data            (atom {})
         ss-api             (atom {})
         ;; ???: Do the perf implications of anonymous functions mean these
@@ -130,6 +129,7 @@
                  ([conn] @(conn)))
      ::ss-dato ss-data
      :ss       ss-api
+     :history  history
      ;; TODO: The individual ss api functions below should be moved
      ;; into the bootstrapped :ss key. The multiple-arities and
      ;; pre-checks makes it difficult though. Need to think about how
@@ -157,10 +157,10 @@
                               ([intent tx meta]
                                (transact! intent tx meta nil))
                               ([intent tx meta cb]
-                               (js/console.log "cast!")
                                (cast! {:event :db/updated
                                        :data  {:intent intent
-                                               :tx     (with-meta tx (merge meta {:tx/cb cb}))}})))
+                                               ;; TODO: Decide on where the cb goes, and stick to it.
+                                               :tx     (with-meta tx (merge meta {:tx/cb (or cb (:tx/cb meta))}))}})))
                 :cast!      cast!
                 :broadcast! (fn broadcast!
                               ([event]
@@ -222,12 +222,12 @@
                                              ;; Check if we're reloading
                                              ;; with a pre-existing db
                                              (when-not bootstrapped?
-                                               (js/console.log (pr-str schema))
-                                               (js/console.log (pr-str (vals schema)))
+                                               ;;(js/console.log (pr-str schema))
+                                               ;;(js/console.log (pr-str (vals schema)))
                                                ;;(js/console.log "conn: " (pr-str conn))
                                                (remove-watch app-db :global-listener)
                                                (reset! app-db @conn)
-                                               (js/console.log "me")
+                                               ;;(js/console.log "me")
                                                (doto app-db
                                                  (db/setup-listener! :global-listener))
                                                (d/listen! app-db :server-tx-report
@@ -236,12 +236,9 @@
                                                               (js/console.log "Listened TX: " tx-report)
                                                               (when (or (get-in tx-report [:tx-meta :tx/broadcast?])
                                                                         (get-in tx-report [:tx-meta :tx/persist?]))
-                                                                (js/console.log "Prep that shit!")
                                                                 (let [prepped (db/prep-broadcastable-tx-report tx-report)]
                                                                   (when @network-enabled?
-                                                                    (js/console.log "Send that tx-shit!")
                                                                     (dato-send! :ss/tx-requested prepped)))))))
-                                               (js/console.log "too: " (pr-str (type app-db)))
                                                (let [local-session-id (d/tempid :db.part/user)]
                                                  (d/transact! app-db (vals schema))
                                                  (d/transact! app-db [{:db/id                 (d/tempid :db.part/user)
@@ -249,10 +246,8 @@
                                                                       ;; TODO: This can likely be moved out to a user-land handler
                                                                       (assoc (:session data) :db/id local-session-id)
                                                                       {:local/current-session {:db/id local-session-id}}]))
-                                               (js/console.log "app-db: " app-db)
                                                (reset! cast-bootstrapped? true))
                                              conn)]
-                                    (js/console.log "Something")
                                     (put! dato-ch [:dato/bootstrap-succeeded session-id])
                                     (loop []
                                       (let [msg (<! ws-ch)]
@@ -262,7 +257,6 @@
 
 ;; TODO: Probably convert to cljs Record to reify this stuff + avoid the apply shortcut
 (defn bootstrap! [dato & args]
-  (js/console.log "bootstrap!")
   (apply (get-in dato [:api :bootstrap!]) args))
 
 (defn db [dato]
@@ -298,21 +292,36 @@
 (defn ss [dato]
   @(:ss dato))
 
-(defn start-loop! [dato]
-  (let [dato-ch (get-in dato [:comms :dato])
-        conn    (get-in dato [:conn])
+(defn start-loop! [dato additional-context]
+  (let [dato-ch         (get-in dato [:comms :dato])
+        conn            (get-in dato [:conn])
         ;; TODO: This is messy, clean up once api and ss are merged
         ;; concepts
-        api     (get-in dato [:api])
-        ss      (get-in dato [:ss])
-        context (merge api {:ss ss} {:dato dato})]
+        api             (get-in dato [:api])
+        ss              (get-in dato [:ss])
+        history         (get-in dato [:history])
+        ;; User's additional-context isn't able to override the
+        ;; dato-provided context, to prevent confusion
+        context         (merge additional-context api {:dato dato
+                                                       :ss   ss})
+        update-history! (fn [tx-report]
+                          (swap! history update-in [:log] conj {:tx/intent     (get-in tx-report [:tx-meta :tx/intent])
+                                                                :time          (js/Date.)
+                                                                :tx            tx-report
+                                                                :tx/transient? (get-in tx-report [:tx-meta :tx/transient?])}))]
+    ;; XXX: Uneasy with:
+    ;; 1. Hard-coding history-listener here (what about other plugins?)
+    ;; 2. Transactions needing history-listener-specific metadata (plugging it in now becomes difficult)
+    (d/listen!
+     conn
+     key
+     update-history!)
     (go
       (loop []
         (alt!
           dato-ch ([{:keys [sender event data] :as payload}]
                    (cond
-                     ;; Special-case waiting on https://github.com/tonsky/datascript/issues/76 and
-                     ;; https://github.com/tonsky/datascript/issues/99
+                     ;; Special-case waiting on https://github.com/tonsky/datascript/issues/76
                      ;; Can eliminate this branch afterwards
                      (= :server/database-transacted event)
                      (let [previous-state @conn]
@@ -325,13 +334,43 @@
                      :else
                      (let [previous-state @conn
                            tx-data        (con/transition @conn payload)
-                           tx-meta        (meta tx-data)]
+                           tx-meta        (meta tx-data)
+                           full-tx-meta   (-> (if tx-meta
+                                                tx-meta
+                                                {:tx/transient? true})
+                                              (update-in [:tx/intent] (fn [intent]
+                                                                        (or intent event))))]
                        (js/console.log "dato-keys: " (pr-str (keys payload)))
                        (js/console.log "\tevent: " (pr-str event))
                        (js/console.log "\ttx-data: " (pr-str tx-data))
-                       (when tx-data
-                         (d/transact! conn tx-data (if tx-meta
-                                                     tx-meta
-                                                     {:transient? true})))
+                       (js/console.log "\ttx-meta: " (pr-str full-tx-meta))
+                       (if tx-data
+                         (do
+                           (js/console.log "Transacting into: " conn)
+                           (d/transact! conn tx-data full-tx-meta))
+                         (update-history! {:tx-meta full-tx-meta}))
                        (con/effect! context previous-state @conn payload)))
                    (recur)))))))
+
+;; Component stuff
+
+(defn dato-node-id [owner]
+  (js/Math.abs (hash (aget owner "_rootNodeID"))))
+
+(defn get-state [owner]
+  (let [db  (db (om/get-shared owner [:dato]))
+        eid (dato-node-id owner)]
+    (d/entity db eid)))
+
+(defn set-state! [owner map]
+  (let [conn   (conn (om/get-shared owner [:dato]))
+        eid    (dato-node-id owner)
+        entity (merge {:db/id eid} map)]
+    (d/transact conn [entity])))
+
+(defn unmount! [owner]
+  (let [conn (conn (om/get-shared owner [:dato]))
+        eid  (dato-node-id owner)]
+    ;; XXX Unclear about this, but this mimics React's default state
+    ;; behavior on unmounts
+    (d/transact conn [[:db.fn/retractEntity eid]])))

@@ -55,6 +55,9 @@
 (defn qe-gl [db guid]
   (qe '[:find ?e :in $ ?a ?v :where [?e ?a ?v]] db :dato/guid guid))
 
+(defn q1-gl [db guid]
+  (q1-by db :dato/guid guid))
+
 (defn val-by
   ([db attr]
    (->> attr
@@ -111,3 +114,7 @@
 
 (defn tx-report->transaction [report]
   (mapv datom->transaction (:tx-data report)))
+
+(defn ref-attr? [db attr-name]
+  (let [attr-value-type (:db/valueType (qe-by db :db/ident attr-name))]
+    (= :db.type/ref attr-value-type)))
