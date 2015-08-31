@@ -4,6 +4,7 @@
             [cljsjs.codemirror.mode.clojure :as cm-clj]
             [cljs.pprint :as pp]
             [cljs.reader :as reader]
+            [clojure.string :as string]
             [dato.lib.core :as dato]
             [dato.debug.components.keyboard-listener :as keyboard]
             [om-bootstrap.panel :as bs-p]
@@ -72,9 +73,10 @@
   (reify
     om/IWillMount
     (will-mount [_]
-      (om/set-state! owner [:tool] :query)
+      (om/set-state! owner [:current-save-slot] 0)
+      (om/set-state! owner [:tool] :states)
       (om/set-state! owner [:current-query] "default")
-      (om/set-state! owner [:open?] true)
+      (om/set-state! owner [:open?] false)
       (om/set-state! owner [:query] (or (:expressions opts) [])))
     om/IDidUpdate
     (did-update [_ _ prev]
@@ -94,56 +96,113 @@
                                                                        (js/console.log "--------------------")))}}))))
     om/IRender
     (render [_]
-      (let [log                (:log data)
-            log-count          (count log)
-            dato               (om/get-shared owner [:dato])
-            db                 (dato/db dato)
-            app-root           (om/value (om/get-shared owner [:app-root]))
-            selected-state-idx (max 0 (min (or (om/get-state owner [:states :selected]) 0) log-count))
-            selected-state     (when (pos? log-count)
-                                 (nth log selected-state-idx))
-            set-app-state!     (fn [idx]
-                                 (when-let [state (and (pos? log-count)
-                                                       (get-in log [idx :tx :db-after]))]
-                                   (let [new-db (om/value state)
-                                         conn   (dato/conn dato)]
-                                     (js/console.log "new-db: " new-db)
-                                     (js/console.log "conn: " conn)
-                                     (js/console.log "\t=>" [(type new-db)
-                                                             (pr-str (type new-db))
-                                                             (satisfies? datascript.core/ISearch new-db)
-                                                             (satisfies? datascript.core/IIndexAccess new-db)
-                                                             (satisfies? datascript.core/IDB new-db)])
-                                     (reset! conn new-db)
-                                     (om/refresh! app-root)
-                                     (js/console.log "app-root: " app-root)
-                                     ;; (js/console.log "Atom? " conn)
-                                     ;; (js/console.log "new-db DB? " (datascript.core/db? new-db))
-                                     ;; (js/console.log "DB? " (datascript.core/db? @conn))
-                                     ;; (js/console.log "post-reset: " conn)
-                                     )))
-            play-all-states!   (fn play-all-states!
-                                 ([]
-                                  (play-all-states! 0))
-                                 ([idx]
-                                  (cond
-                                    (> idx (dec log-count))          nil
-                                    (get-in log [idx :tx :db-after]) (do
-                                                                       (set-app-state! idx)
-                                                                       (js/setTimeout #(play-all-states! (inc idx)) 1))
-                                    :else                            (js/setTimeout #(play-all-states! (inc idx)) 1))))]
+      (let [log                 (:log data)
+            log-count           (count log)
+            dato                (om/get-shared owner [:dato])
+            db                  (dato/db dato)
+            app-root            (om/value (om/get-shared owner [:app-root]))
+            selected-state-idx  (max 0 (min (or (om/get-state owner [:states :selected]) 0) log-count))
+            selected-state      (when (pos? log-count)
+                                  (nth log selected-state-idx))
+            set-app-state!      (fn [idx]
+                                  (when-let [state (and (pos? log-count)
+                                                        (get-in log [idx :tx :db-after]))]
+                                    (let [new-db (om/value state)
+                                          conn   (dato/conn dato)]
+                                      (reset! conn new-db)
+                                      (om/refresh! app-root))))
+            save-state!         (fn [_ slot-idx]
+                                  (let [local-storage-name (str "dato_save_state_" slot-idx)
+                                        existing-db-str    (js/localStorage.getItem local-storage-name)
+                                        existing-db        (when existing-db-str
+                                                             (reader/read-string existing-db-str))
+                                        title              (or (:title existing-db)
+                                                               (js/prompt "Title for this save state" (str "State " slot-idx)))
+                                        title              (if (string/blank? title)
+                                                             (str "State " slot-idx)
+                                                             title)]
+                                    (js/localStorage.setItem local-storage-name (pr-str {:title title
+                                                                                         :db    (dato/db dato)}))))
+            restore-state! (fn [new-db]
+                             (let [conn (dato/conn dato)]
+                               (reset! conn new-db)
+                               (om/refresh! app-root)))
+            restore-save-state! (fn [_ slot-idx]
+                                  (let [local-storage-name (str "dato_save_state_" slot-idx)
+                                        existing-db-str    (js/localStorage.getItem local-storage-name)
+                                        existing-db        (when existing-db-str
+                                                             (reader/read-string existing-db-str))]
+                                    (when existing-db
+                                      (let [new-db (:db existing-db)
+                                            conn   (dato/conn dato)]
+                                        (reset! conn new-db)
+                                        (om/refresh! app-root)))))
+            play-all-states!    (fn play-all-states!
+                                  ([]
+                                   (play-all-states! 0))
+                                  ([idx]
+                                   (cond
+                                     (> idx (dec log-count))          nil
+                                     (get-in log [idx :tx :db-after]) (do
+                                                                        (set-app-state! idx)
+                                                                        (js/setTimeout #(play-all-states! (inc idx)) 1))
+                                     :else                            (js/setTimeout #(play-all-states! (inc idx)) 1))))]
         (dom/div
          {:style {:display (when-not (om/get-state owner [:open?]) "none")}}
-         (om/build keyboard/keyboard-handler {} {:opts {:keymap (atom {["ctrl+slash"] #(om/update-state! owner [:open?] not)})}})
+         (om/build keyboard/keyboard-handler {} {:opts {:keymap (atom {["ctrl+slash"] #(om/update-state! owner [:open?] not)
+                                                                       ["ctrl+s"]     #(save-state! owner (om/get-state owner [:current-save-slot]))
+                                                                       ["ctrl+r"]     #(restore-save-state! owner (om/get-state owner [:current-save-slot]))
+                                                                       ["ctrl+0"]     #(do
+                                                                                         (restore-save-state! owner 0)
+                                                                                         (om/set-state! owner [:current-save-slot] 0))
+                                                                       ["ctrl+1"]     #(do
+                                                                                         (restore-save-state! owner 1)
+                                                                                         (om/set-state! owner [:current-save-slot] 1))
+                                                                       ["ctrl+2"]     #(do
+                                                                                         (restore-save-state! owner 2)
+                                                                                         (om/set-state! owner [:current-save-slot] 2))
+                                                                       ["ctrl+3"]     #(do
+                                                                                         (restore-save-state! owner 3)
+                                                                                         (om/set-state! owner [:current-save-slot] 3))
+                                                                       ["ctrl+4"]     #(do
+                                                                                         (restore-save-state! owner 4)
+                                                                                         (om/set-state! owner [:current-save-slot] 4))
+                                                                       ["ctrl+5"]     #(do
+                                                                                         (restore-save-state! owner 5)
+                                                                                         (om/set-state! owner [:current-save-slot] 5))
+                                                                       ["ctrl+6"]     #(do
+                                                                                         (restore-save-state! owner 6)
+                                                                                         (om/set-state! owner [:current-save-slot] 6))
+                                                                       ["ctrl+7"]     #(do
+                                                                                         (restore-save-state! owner 7)
+                                                                                         (om/set-state! owner [:current-save-slot] 7))
+                                                                       ["ctrl+8"]     #(do
+                                                                                         (restore-save-state! owner 8)
+                                                                                         (om/set-state! owner [:current-save-slot] 8))
+                                                                       ["ctrl+9"]     #(do
+                                                                                         (restore-save-state! owner 9)
+                                                                                         (om/set-state! owner [:current-save-slot] 9))})}})
          (dom/div
           {:className     "debugger"
            :on-mouse-move #(.stopPropagation %)}
           (bs-p/panel
-           {:header (dom/div (dom/button {:on-click #(om/set-state! owner [:tool] :debugger)} "Debugger")
-                             (dom/button {:on-click #(om/set-state! owner [:tool] :editor)} "Editor")
+           {:header (dom/div "["
+                             (dom/button {:on-click #(om/set-state! owner [:tool] :timeline)} "Timeline")
+                             ;;(dom/button {:on-click #(om/set-state! owner [:tool] :editor)} "Editor")
+                             "] | ["
+                             (dom/button {:on-click #(om/set-state! owner [:tool] :states)} "States")
+                             "] | ["
                              (dom/button {:on-click #(om/set-state! owner [:tool] :query)} "Expression Watch")
-                             " - Dato Debugger " (dom/small "(" log-count " states)"))}
+                             "] - Dato Debugger " (dom/small "(" log-count " states)"))}
            (case (om/get-state owner [:tool])
+             :states   (dom/div
+                        (dom/h3 "Click a title to restore a state")
+                        (dom/ul
+                         (for [slot-idx (range 0 10)]
+                           (let [local-storage-name (str "dato_save_state_" slot-idx)
+                                 existing-db        (when-let [db-str (js/localStorage.getItem local-storage-name)]
+                                                      (reader/read-string db-str))]
+                             (dom/li {:style {:cursor "pointer"}} (:title existing-db "No state saved"))))))
              :query    (dom/div
                         (g/grid
                          {}
@@ -202,7 +261,7 @@
                                    :property "stylesheet"
                                    :href     "/css/vendor/codemirror/codemirror.css"})
                         (dom/div {:className "editor"}))
-             :debugger (dom/div
+             :timeline (dom/div
                         (dom/h3 (pr-str (get-in log [selected-state-idx :tx/intent])))
                         (dom/div
                          (dom/input {:type      "range"
