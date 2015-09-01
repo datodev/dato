@@ -362,7 +362,16 @@
         eid (dato-node-id owner)]
     (d/entity db eid)))
 
+
+;; XXX: Unsure about -nr variant
 (defn set-state! [owner map]
+  (let [conn   (conn (om/get-shared owner [:dato]))
+        eid    (dato-node-id owner)
+        entity (merge {:db/id eid} map)]
+    (d/transact conn [entity])
+    (om/refresh! owner)))
+
+(defn set-state-nr! [owner map]
   (let [conn   (conn (om/get-shared owner [:dato]))
         eid    (dato-node-id owner)
         entity (merge {:db/id eid} map)]
