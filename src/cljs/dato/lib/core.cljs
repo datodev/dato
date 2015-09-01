@@ -364,18 +364,24 @@
 
 
 ;; XXX: Unsure about -nr variant
-(defn set-state! [owner map]
-  (let [conn   (conn (om/get-shared owner [:dato]))
-        eid    (dato-node-id owner)
-        entity (merge {:db/id eid} map)]
-    (d/transact conn [entity])
-    (om/refresh! owner)))
-
 (defn set-state-nr! [owner map]
-  (let [conn   (conn (om/get-shared owner [:dato]))
-        eid    (dato-node-id owner)
-        entity (merge {:db/id eid} map)]
-    (d/transact conn [entity])))
+  (let [conn                       (conn (om/get-shared owner [:dato]))
+        eid                        (dato-node-id owner)
+        entity                     (merge {:db/id eid} map)
+        current-state              (dsu/touch+ (d/entity @conn eid))
+        ;; TODO: Might be a way to avoid this
+        [update-ent remove-datoms] (reduce (fn [[update-ent remove-datoms] [k v]]
+                                             (if (nil? v)
+                                               (if-let [existing-value (get current-state k)]
+                                                 [update-ent (conj remove-datoms [:db/retract eid k existing-value])]
+                                                 [update-ent remove-datoms])
+                                               [(assoc update-ent k v) remove-datoms])) [{} []] entity)
+        tx-data                    (remove empty? (conj remove-datoms update-ent))]
+    (d/transact conn tx-data)))
+
+(defn set-state! [owner map]
+  (set-state-nr! owner map)
+  (om/refresh! owner))
 
 (defn unmount! [owner]
   (let [conn (conn (om/get-shared owner [:dato]))
