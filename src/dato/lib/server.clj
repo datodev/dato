@@ -3,7 +3,6 @@
             [cognitect.transit :as transit]
             [datomic.api :as d]
             [dato.db.utils :as dsu]
-            [immutant.caching :as cache]
             [immutant.codecs :as cdc]
             [immutant.web :as iw]
             [immutant.web.async :as async]
