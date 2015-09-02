@@ -29,6 +29,11 @@
   (-compare [x y]
     (compare (.toString x) (.toString y))))
 
+(extend-type cljs.core/PersistentHashSet
+  IComparable
+  (-compare [x y]
+    (compare (hash x) (hash y))))
+
 (def transit-reader
   (transit/reader :json
                   {:handlers
