@@ -199,14 +199,15 @@
                                "] - Dato Debugger " (dom/small "(" log-count " states)"))}
              (case (om/get-state owner [:tool])
                :states   (dom/div
-                          (dom/h3 "Click a title to restore a state")
+                          (dom/h3 "Click a slot to restore a state")
                           (dom/ul
                            (for [slot-idx (range 0 10)]
                              (let [local-storage-name (str "dato_save_state_" slot-idx)
-                                   existing-db        (when-let [db-str (js/localStorage.getItem local-storage-name)]
-                                                        (reader/read-string db-str))]
+                                   existing-db        (js/localStorage.getItem local-storage-name)]
                                (dom/li {:style    {:cursor "pointer"}
-                                        :on-click #(restore-save-state! owner slot-idx)} (:title existing-db "No state saved"))))))
+                                        :on-click #(restore-save-state! owner slot-idx)} (if existing-db
+                                                                                           (dom/strong "Slot " slot-idx)
+                                                                                           "No state saved"))))))
                :query    (dom/div
                           (g/grid
                            {}
