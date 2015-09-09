@@ -345,14 +345,13 @@
                                                 {:tx/transient? true})
                                               (update-in [:tx/intent] (fn [intent]
                                                                         (or intent event))))]
-                       (js/console.log "dato-keys: " (pr-str (keys payload)))
-                       (js/console.log "\tevent: " (pr-str event))
-                       (js/console.log "\ttx-data: " (pr-str tx-data))
-                       (js/console.log "\ttx-meta: " (pr-str full-tx-meta))
+                       (when-not (:tx/transient? full-tx-meta)
+                         (js/console.log "dato-keys: " (pr-str (keys payload)))
+                         (js/console.log "\tevent: " (pr-str event))
+                         (js/console.log "\ttx-data: " (pr-str tx-data))
+                         (js/console.log "\ttx-meta: " (pr-str full-tx-meta)))
                        (if tx-data
-                         (do
-                           (js/console.log "Transacting into: " conn)
-                           (d/transact! conn tx-data full-tx-meta))
+                         (d/transact! conn tx-data full-tx-meta)
                          (update-history! {:tx-meta full-tx-meta}))
                        (con/effect! context previous-state @conn payload)))
                    (recur)))))))
