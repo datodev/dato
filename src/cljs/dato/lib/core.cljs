@@ -369,6 +369,8 @@
 
 ;; XXX: Unsure about -nr variant
 (defn set-state-nr! [owner map]
+  ;; No nested collections allowed (except sets, for now)
+  {:pre [(not (some #(or (map? %) (vector? %)) (vals map)))]}
   (let [conn                       (conn (om/get-shared owner [:dato]))
         eid                        (dato-node-id owner)
         entity                     (merge {:db/id eid} map)
