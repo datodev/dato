@@ -89,9 +89,7 @@
                               (cast! payload nil))
                              ([payload meta]
                               (if @cast-bootstrapped?
-                                (do
-                                  (js/console.log "cast! " (pr-str payload))
-                                  (put! dato-ch payload))
+                                (put! dato-ch payload)
                                 (js/console.log "Not yet bootstrapped, ignoring cast"))
                               true))
         history            (atom {:current-path nil
@@ -173,7 +171,6 @@
                               ([event payload]
                                (broadcast! event payload nil))
                               ([event payload meta]
-                               (js/console.log "broadcast! " (pr-str event) (pr-str payload))
                                (dato-send! event payload)
                                true))
                 :bootstrap! (fn []
