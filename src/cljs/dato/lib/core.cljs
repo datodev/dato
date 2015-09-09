@@ -68,7 +68,7 @@
                                                                                                    (if-let [cb-id (:server/rpc-id data)]
                                                                                                      (let [cb-or-ch (get @pending-rpc cb-id)]
                                                                                                        (swap! pending-rpc dissoc cb-id)
-                                                                                                       ;; Should we just pass the whole payload through, or just the data/resultts?
+                                                                                                       ;; Should we just pass the whole payload through, or just the data/results?
                                                                                                        (cond
                                                                                                          (chan? cb-or-ch) (put! cb-or-ch (:data data))
                                                                                                          (fn? cb-or-ch)   (cb-or-ch (:data data))
