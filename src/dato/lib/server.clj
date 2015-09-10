@@ -187,8 +187,9 @@
         _                (println "Message data:" (pr-str msg))
         raw-incoming     (cdc/decode (.getBytes msg) :transit)
         [event msg-data] raw-incoming
-        args             (:args msg-data)
-        ;; this will fail for e.g. (log-out!) (:args msg-data) will be nil
+        args             (or (:args msg-data) [:place-holder])
+        ;; :place-holder is to prever failure for e.g. (log-out!),
+        ;; otherwise (:args msg-data) will be nil
         rpc?             (boolean args)
         _                (println "raw-incoming ffs: " (pr-str raw-incoming))
         _                (println "\t: " (pr-str [event] :handler))
@@ -196,16 +197,14 @@
         _                (def -last-session session)
         _                (println "\targs: " args)
         handler          (get-in routing-table [[event] :handler] default-handler)
-        ;; temp hackishness
+        ;; Temp hackishness
         handler          (if (var? handler)
                            @handler
                            handler)
         data             (if rpc?
-                           (do
-                             (println "rpc")
-                             {:server/rpc-id (:rpc/id msg-data)
-                              :data          (apply (partial handler session all-sessions) args)})
-                           (handler session raw-incoming all-sessions))
+                           {:server/rpc-id (:rpc/id msg-data)
+                            :data          (apply (partial handler session all-sessions) args)}
+                           (apply (partial handler session all-sessions) (or args)))
         _                (println "data: " (pr-str data))
         encoded          (cdc/encode data :transit)]
     (when data
@@ -239,7 +238,7 @@
              :ss      ss
              :schema  (datomic-db->datomic-schema db)})))
 
-(defn update-session [my-session [_ data] context]
+(defn update-session [my-session _ data]
   ;; XXX update-in is dangerous here, we're allowing any key the user
   ;; encodes in transit to be inserted here and to get broadcast out
   ;; to other users. Should apply a whitelist approach.
@@ -254,7 +253,19 @@
       (let [ch (get-in session [:live :ch])]
         (async/send! ch payload)))))
 
-(defn r-pull [session [_ incoming] context]
+(defn r-q [session _ incoming]
+  (println "r-q" (pr-str incoming))
+  (let [q-name        (:name incoming)
+        datalog-query (:q incoming)
+        query-args    (:args incoming)
+        data          (apply d/q datalog-query
+                             (session-db (dato-session session))
+                             query-args)]
+    (ss-msg (keyword "server" (str (name q-name) "-succeeded"))
+            {:results data})))
+
+(defn r-pull [session _ incoming]
+  (println "R-pull! " (pr-str incoming))
   (let [p-name  (:name incoming)
         pattern (incoming/ensure-pull-required-fields (:pull incoming))
         data    (d/pull (session-db (dato-session session))
@@ -263,7 +274,7 @@
     (ss-msg (keyword "server" (str (name p-name) "-succeeded"))
             {:results data})))
 
-(defn r-qes-by [session [_ incoming] context]
+(defn r-qes-by [session _ incoming]
   (let [qes-name (:name incoming)
         data     (->> (if (:v incoming)
                         (dsu/qes-by (session-db (dato-session session))
@@ -276,14 +287,12 @@
             {:results data})))
 
 
-
-
-(defn handle-transaction [session raw context]
+(defn handle-transaction [session _ raw]
   (println "WTF handle-transaction: ")
   (println "\t " session)
   (println "\t " raw)
   (def l-raw raw)
-  (let [[_ incoming] raw
+  (let [incoming     raw
         _            (def l-incoming incoming)
         full-session (dato-session session)
         dato-server  (session-server full-session)
@@ -307,11 +316,12 @@
       )))
 
 (def default-routing-table
-  {[:session/updated] {:handler update-session}
-   [:ss/tx-requested] {:handler handle-transaction}
-   [:ss/r-qes-by]     {:handler r-qes-by}
-   [:ss/r-pull]       {:handler r-pull}
-   [:ss/bootstrap]    {:handler bootstrap-user}})
+  {[:session/updated] {:handler #'update-session}
+   [:ss/tx-requested] {:handler #'handle-transaction}
+   [:ss/r-q]          {:handler #'r-q}
+   [:ss/r-qes-by]     {:handler #'r-qes-by}
+   [:ss/r-pull]       {:handler #'r-pull}
+   [:ss/bootstrap]    {:handler #'bootstrap-user}})
 
 (defn new-routing-table [table]
   (merge default-routing-table table))
