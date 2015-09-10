@@ -72,7 +72,7 @@
                                                                                                        (cond
                                                                                                          (chan? cb-or-ch) (put! cb-or-ch (:data data))
                                                                                                          (fn? cb-or-ch)   (cb-or-ch (:data data))
-                                                                                                         :else            nil))
+                                                                                                         :else            (ss-cast! (:data data))))
                                                                                                      (ss-cast! data)))))
                                                                           (.readAsText fr (.-data event))))
                                                           :on-error   (fn [event] (js/console.log ":on-error :" event))})
@@ -99,24 +99,25 @@
         ;; ???: Do the perf implications of anonymous functions mean these
         ;; shouldn't be in a tight loop?
         fn-desc->rpc       (fn fn-desc->rpc [remote-name desc]
-                             (fn [& all-args]
-                               ;; TODO: Check if last argument is a channel, an
-                               (let [cb-or-ch (last all-args)
-                                     cb       (cond
-                                                (fn? cb-or-ch)   cb-or-ch
-                                                (chan? cb-or-ch) #(put! cb-or-ch %)
-                                                :else            false)
-                                     args     (if cb
-                                                (drop-last 1 all-args)
-                                                all-args)
-                                     uuid     (d/squuid)]
-                                 (when (fn? cb)
-                                   (swap! pending-rpc assoc uuid cb-or-ch))
-                                 (dato-send! remote-name {:args   args
-                                                          :rpc/id uuid})
-                                 (if (chan? cb-or-ch)
-                                   cb-or-ch
-                                   uuid))))]
+                             (let [f (fn [& all-args]
+                                       ;; TODO: Check if last argument is a channel, an
+                                       (let [cb-or-ch (last all-args)
+                                             cb       (cond
+                                                        (fn? cb-or-ch)   cb-or-ch
+                                                        (chan? cb-or-ch) #(put! cb-or-ch %)
+                                                        :else            false)
+                                             args     (if cb
+                                                        (drop-last 1 all-args)
+                                                        all-args)
+                                             uuid     (d/squuid)]
+                                         (when (fn? cb)
+                                           (swap! pending-rpc assoc uuid cb-or-ch))
+                                         (dato-send! remote-name {:args   args
+                                                                  :rpc/id uuid})
+                                         (if (chan? cb-or-ch)
+                                           cb-or-ch
+                                           uuid)))]
+                               f))]
     {:comms    comms
      ;; Just for debugging to simulate messages coming in from the
      ;; server
@@ -184,29 +185,31 @@
                                     (recur)))
                                 (dato-send! :ss/bootstrap {})
                                 (js/console.log "1. Bootstrap")
-                                (let [{:keys [data] :as -bootstrap} (loop [msg (<! ws-ch)]
-                                                                      (if (= :ss/bootstrap-succeeded (:event msg))
-                                                                        msg
-                                                                        ;; Not the
-                                                                        ;; message
-                                                                        ;; we're
-                                                                        ;; looking for
-                                                                        ;; (could be
-                                                                        ;; something
-                                                                        ;; during
-                                                                        ;; refreshing
-                                                                        ;; with
-                                                                        ;; figwheel. Put
-                                                                        ;; the message
-                                                                        ;; back on,
-                                                                        ;; wait a few
-                                                                        ;; ms, and try
-                                                                        ;; again. Still very racy.
-                                                                        (do
-                                                                          (put! ws-ch msg)
-                                                                          (<! (async/timeout 16))
-                                                                          (recur (<! ws-ch)))))
-                                      _ (js/console.log "2. Bootstrap; " data)
+                                (let [{:keys [data] :as -rpc-response} (loop [msg (<! ws-ch)]
+                                                                         (if (= :ss/bootstrap-succeeded (get-in msg [:data :event]))
+                                                                           msg
+                                                                           ;; Not the
+                                                                           ;; message
+                                                                           ;; we're
+                                                                           ;; looking for
+                                                                           ;; (could be
+                                                                           ;; something
+                                                                           ;; during
+                                                                           ;; refreshing
+                                                                           ;; with
+                                                                           ;; figwheel. Put
+                                                                           ;; the message
+                                                                           ;; back on,
+                                                                           ;; wait a few
+                                                                           ;; ms, and try
+                                                                           ;; again. Still very racy.
+                                                                           (do
+                                                                             (put! ws-ch msg)
+                                                                             (<! (async/timeout 16))
+                                                                             (recur (<! ws-ch)))))
+                                      data                             (:data data)
+                                      _                                (js/console.log "1.5. -Bootstrap: " -rpc-response)
+                                      _                                (js/console.log "2. Bootstrap; " data)
                                       {:keys [session-id schema]}      data]
                                   (swap! ss-data merge (:ss data))
                                   (reset! ss-api (->> (:ss data)
@@ -232,15 +235,16 @@
                                                ;;(js/console.log "me")
                                                (doto app-db
                                                  (db/setup-listener! :global-listener))
-                                               (d/listen! app-db :server-tx-report
-                                                          (fn [tx-report]
-                                                            (let [datoms (tx-report->transaction tx-report)]
-                                                              (js/console.log "Listened TX: " tx-report)
-                                                              (when (or (get-in tx-report [:tx-meta :tx/broadcast?])
-                                                                        (get-in tx-report [:tx-meta :tx/persist?]))
-                                                                (let [prepped (db/prep-broadcastable-tx-report tx-report)]
-                                                                  (when @network-enabled?
-                                                                    (dato-send! :ss/tx-requested prepped)))))))
+                                               (let [request-transaction! (get-in @ss-api [:tx-requested])]
+                                                 (d/listen! app-db :server-tx-report
+                                                            (fn [tx-report]
+                                                              (let [datoms (tx-report->transaction tx-report)]
+                                                                ;;(js/console.log "Listened TX: " tx-report)
+                                                                (when (or (get-in tx-report [:tx-meta :tx/broadcast?])
+                                                                          (get-in tx-report [:tx-meta :tx/persist?]))
+                                                                  (let [prepped (db/prep-broadcastable-tx-report tx-report)]
+                                                                    (when @network-enabled?
+                                                                      (request-transaction! prepped))))))))
                                                (let [local-session-id (d/tempid :db.part/user)]
                                                  (d/transact! app-db (vals schema))
                                                  (d/transact! app-db [{:db/id                 (d/tempid :db.part/user)
@@ -279,7 +283,6 @@
   (get-in dato [:api :r-transact]) data)
 
 (defn transact! [dato & args]
-  (js/console.log "transact!")
   (apply (get-in dato [:api :transact!]) args))
 
 (defn cast! [dato event-data]
