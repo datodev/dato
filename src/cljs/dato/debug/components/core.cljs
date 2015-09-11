@@ -154,7 +154,7 @@
       (om/set-state! owner [:current-save-slot] 0)
       (om/set-state! owner [:tool] :components)
       (om/set-state! owner [:current-query] "default")
-      (om/set-state! owner [:open?] true)
+      (om/set-state! owner [:open?] (or (:open? data) false))
       (om/set-state! owner [:query] (or (:expressions opts) [])))
     om/IDidUpdate
     (did-update [_ _ prev]
