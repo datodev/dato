@@ -62,14 +62,14 @@
 
 ;; (-main (js/document.getElementById "dato-app") app-state)
 
-(defonce connected?
-  (do
-    (figwheel/watch-and-reload
-     :websocket-url "ws://localhost:3449/figwheel-ws"
-     :jsload-callback (fn []
-                        (js/console.log "Reloading from figwheel..")))
-    (weasel/connect "ws://localhost:9001" :verbose true :print #{:repl :console})
-    true))
+;; (defonce connected?
+;;   (do
+;;     (figwheel/watch-and-reload
+;;      :websocket-url "ws://localhost:3449/figwheel-ws"
+;;      :jsload-callback (fn []
+;;                         (js/console.log "Reloading from figwheel..")))
+;;     (weasel/connect "ws://localhost:9001" :verbose true :print #{:repl :console})
+;;     true))
 
-(defn ^:export inspect-state []
-  (clj->js @app-state))
+;; (defn ^:export inspect-state []
+;;   (clj->js @app-state))
