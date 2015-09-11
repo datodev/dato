@@ -389,6 +389,16 @@
   (set-state-nr! owner map)
   (om/refresh! owner))
 
+(defn update-state! [owner f]
+  (let [current-state (get-state owner)
+        new-state     (f (dsu/touch+ current-state))]
+    (set-state! owner new-state)))
+
+(defn update-state-nr! [owner f]
+  (let [current-state (get-state owner)
+        new-state     (f (dsu/touch+ current-state))]
+    (set-state-nr! owner new-state)))
+
 (defn unmount! [owner]
   (let [conn (conn (om/get-shared owner [:dato]))
         eid  (dato-node-id owner)]
