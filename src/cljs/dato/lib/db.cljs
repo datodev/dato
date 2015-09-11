@@ -114,7 +114,7 @@
                            (fn [s]
                              (update-in s [::listener-keys listen-trigger]
                                         #(or % (.getNextUniqueId (.getInstance IdGenerator))))))
-      (let [key (om/get-state owner [::listener-key listen-trigger])]
+      (let [key (om/get-state owner [::listener-keys listen-trigger])]
         (add-trigger-fn conn trigger key (fn [tx-report]
                                            (if (om/mounted? owner)
                                              (om/refresh! owner)
