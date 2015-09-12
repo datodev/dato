@@ -1,4 +1,5 @@
-(ns dato.lib.core)
+(ns dato.lib.core
+  (:import [java.util Date]))
 
 (defn -main []
-  (println "Loading Dato separately at " (Date.)))
+  (println "Loading Dato separately at" (Date.)))
