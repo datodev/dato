@@ -6,7 +6,7 @@
             [cljs.reader :as reader]
             [clojure.string :as string]
             [dato.lib.core :as dato]
-            [dato.datascript-utils :as dsu]
+            [dato.db.utils :as dsu]
             [dato.debug.components.keyboard-listener :as keyboard]
             [goog.dom.classes :as gclass]
             [om-bootstrap.panel :as bs-p]

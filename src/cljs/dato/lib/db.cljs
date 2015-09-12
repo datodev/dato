@@ -1,8 +1,8 @@
 (ns ^:figwheel-always dato.lib.db
     (:require [clojure.set :as sets]
               [datascript :as d]
-              [dato.datascript-utils :as dsu]
-              [dato.client.utils.seq :refer [dissoc-in]]
+              [dato.db.utils :as dsu]
+              [dato.lib.utils :refer [dissoc-in]]
               [om.core :as om])
     (:import [goog.ui IdGenerator]))
 

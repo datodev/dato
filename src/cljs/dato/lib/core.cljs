@@ -3,7 +3,7 @@
             [cognitect.transit :as transit]
             [datascript :as d]
             [datascript.core :as dc]
-            [dato.datascript-utils :as dsu]
+            [dato.db.utils :as dsu]
             [dato.lib.controller :as con]
             [dato.lib.websockets :as ws]
             [dato.lib.db :as db]
