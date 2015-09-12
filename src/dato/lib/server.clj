@@ -149,11 +149,10 @@
                            @(:server dato-config)
                            (:server dato-config))
         user-db-ids      (mapv :db/id (dsu/qes-by (ddb server) :user/email))
-        full-session     {:live            {:ch   ch
-                                            :dato dato-config}
-                          :id              id
-                          :session/key     id
-                          :session/user-id (rand-nth user-db-ids)}
+        full-session     {:live        {:ch   ch
+                                        :dato dato-config}
+                          :id          id
+                          :session/key id}
         others-data      (cdc/encode (ss-msg :server/session-created {:session (dissoc full-session :live)}) :transit)
         full-session-enc (cdc/encode (dissoc full-session :live) :transit)]
     ;; Put new channel in global storage
