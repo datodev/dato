@@ -232,13 +232,14 @@
                                                                   (let [prepped (db/prep-broadcastable-tx-report tx-report)]
                                                                     (when @network-enabled?
                                                                       (request-transaction! prepped))))))))
-                                               (let [local-session-id (d/tempid :db.part/user)]
+                                               (let [local-session-id (d/tempid :db.part/user)
+                                                     local-session-tx [{:db/id                 (d/tempid :db.part/user)
+                                                                        :dato.meta/bootrapped? true}
+                                                                       ;; TODO: This can likely be moved out to a user-land handler
+                                                                       (assoc (:session data) :db/id local-session-id)
+                                                                       {:local/current-session {:db/id local-session-id}}]]
                                                  (d/transact! app-db (vals schema))
-                                                 (d/transact! app-db [{:db/id                 (d/tempid :db.part/user)
-                                                                       :dato.meta/bootrapped? true}
-                                                                      ;; TODO: This can likely be moved out to a user-land handler
-                                                                      (assoc (:session data) :db/id local-session-id)
-                                                                      {:local/current-session {:db/id local-session-id}}]))
+                                                 (d/transact! app-db local-session-tx))
                                                (reset! cast-bootstrapped? true))
                                              conn)]
                                     (put! dato-ch [:dato/bootstrap-succeeded session-id])
