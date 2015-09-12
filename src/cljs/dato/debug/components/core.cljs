@@ -334,7 +334,7 @@
                                                                                                                                                           {:str    str-value
                                                                                                                                                            :valid? valid?})))))
                                                        :style       {:width  "100%"
-                                                                     :height "100%"}}))))
+                                                                     :height 50}}))))
                               (g/col {:xs 12 :sm 7 :md 7 :lg 7}
                                      (when-let [current-query (om/get-state owner [:query (om/get-state owner [:current-query])])]
                                        (dom/pre
