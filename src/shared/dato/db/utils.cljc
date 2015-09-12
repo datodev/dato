@@ -76,6 +76,12 @@
   ;; (into {}) makes the map assoc'able, but lacks a :db/id, which is annoying for later lookups.
   (into (select-keys ent [:db/id]) (d/touch ent)))
 
+(defn t
+  "By default, touch returns a map that can't be assoc'd. Fix it"
+  [ent]
+  ;; (into {}) makes the map assoc'able, but lacks a :db/id, which is annoying for later lookups.
+  (into (select-keys ent [:db/id]) (d/touch ent)))
+
 (defn touch-all
   "Runs the query that returns [[eid][eid]] and returns all entity maps.
    Uses the first DB to look up all entities"
