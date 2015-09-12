@@ -1,5 +1,5 @@
 (ns dato.datomic.schema
-  (:require [dato.datascript-utils :as dsu]
+  (:require [dato.db.utils :as dsu]
             [dato.datomic :as datod]
             [datomic.api :refer [db q] :as d]))
 

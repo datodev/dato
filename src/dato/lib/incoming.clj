@@ -1,7 +1,7 @@
 (ns dato.lib.incoming
   (:require [datomic.api :as d]
             [dato.lib.datomic :as datod]
-            [dato.datascript-utils :as dsu]))
+            [dato.db.utils :as dsu]))
 
 (defn ensure-pull-required-fields [pattern]
   (letfn [(ensure-fields [node]
