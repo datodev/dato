@@ -346,7 +346,6 @@
                                               (update-in [:tx/intent] (fn [intent]
                                                                         (or intent event))))]
                        (when-not (:tx/transient? full-tx-meta)
-                         (js/console.log "dato-keys: " (pr-str (keys payload)))
                          (js/console.log "\tevent: " (pr-str event))
                          (js/console.log "\ttx-data: " (pr-str tx-data))
                          (js/console.log "\ttx-meta: " (pr-str full-tx-meta)))
