@@ -22,7 +22,7 @@
                  [cljsjs/react "0.12.2-8"]
                  [com.cognitect/transit-clj "0.8.275" :exclusions [com.fasterxml.jackson.core/jackson-core]]
                  [com.cognitect/transit-cljs "0.8.220" :exclusions [org.clojure/clojurescript]]
-                 [com.datomic/datomic-pro "0.9.5206" :exclusions [org.slf4j/slf4j-nop joda-time org.slf4j/slf4j-api org.clojure/clojurescript]]
+                 [com.datomic/datomic-pro "0.9.5206" :exclusions [org.slf4j/slf4j-nop org.clojure/clojure org.slf4j/log4j-over-slf4j joda-time org.slf4j/slf4j-api org.clojure/clojurescript com.fasterxml.jackson.core/jackson-core]]
                  [com.fasterxml.jackson.core/jackson-annotations "2.3.1"]
                  [com.fasterxml.jackson.core/jackson-core "2.3.1"]
                  [org.omcljs/om "0.8.8"]
