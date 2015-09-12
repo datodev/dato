@@ -209,7 +209,7 @@
                                   (let [db (let [bootstrapped? (bootstrapped? @app-db)
                                                  conn          (if bootstrapped?
                                                                  app-db
-                                                                 (d/create-conn (merge schema cs-schema)))]
+                                                                 (d/create-conn (merge schema db/cs-schema cs-schema)))]
                                              (def --fconn conn)
                                              ;; Check if we're reloading
                                              ;; with a pre-existing db
