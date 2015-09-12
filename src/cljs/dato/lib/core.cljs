@@ -21,19 +21,6 @@
 
 (set! (.-networkEnabled js/window) network-enabled?)
 
-;; Extend protocols for transit/datascript reasons.  This should
-;; *possibly* be pushed off to user-land code, but needs to be there
-;; to optimize (not solve) Datomic/DataScript compatibility.
-(extend-type goog.Uri
-  IComparable
-  (-compare [x y]
-    (compare (.toString x) (.toString y))))
-
-(extend-type cljs.core/PersistentHashSet
-  IComparable
-  (-compare [x y]
-    (compare (hash x) (hash y))))
-
 (def transit-reader
   (transit/reader :json
                   {:handlers
