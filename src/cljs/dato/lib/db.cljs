@@ -14,9 +14,7 @@
 ;; Things that aren't reified in the persistent/ephemeral datomic
 ;; instance
 (def cs-schema
-  {:local/current-session {:db/valueType :db.type/ref}
-   :session/user          {:db/valueType :db.type/ref}
-   :summon/session        {:db/valueType :db.type/ref}})
+  {:local/current-session {:db/valueType :db.type/ref}})
 
 (defn enum [db db-id]
   ;; Try to support both straight db-id and {:db/id db-id}.
