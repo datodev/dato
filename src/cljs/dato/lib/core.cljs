@@ -246,7 +246,8 @@
                                     (loop []
                                       (let [msg (<! ws-ch)]
                                         ;; Should this be more sophisticated?
-                                        (put! dato-ch msg)
+                                        (when (:event msg)
+                                          (put! dato-ch msg))
                                         (recur)))))))}}))
 
 ;; TODO: Probably convert to cljs Record to reify this stuff + avoid the apply shortcut
