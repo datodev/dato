@@ -193,11 +193,11 @@
                   (pr-str))]
     (js/localStorage.setItem "dato-debugger-settings" state)))
 
-(defn history-com [data owner opts]
+(defn devtools* [data owner opts]
   (reify
     om/IDisplayName
     (display-name [_]
-      "DatoDebuggerContainer")
+      "DatoDevtools")
     om/IWillMount
     (will-mount [_]
       (let [local-storage-state (reader/read-string (or (js/localStorage.getItem "dato-debugger-settings") "{}"))]
@@ -281,8 +281,7 @@
         (dom/div
          (dom/div
           {:className "dato-debugger"}
-          (om/build keyboard/keyboard-handler {} {:opts {:keymap (atom {["ctrl+slash"]   #(om/update-state! owner [:open?] not)
-                                                                        ["ctrl+s"]       #(save-state! owner (om/get-state owner [:current-save-slot]))
+          (om/build keyboard/keyboard-handler {} {:opts {:keymap (atom {["ctrl+s"]       #(save-state! owner (om/get-state owner [:current-save-slot]))
                                                                         ["ctrl+r"]       #(restore-save-state! owner (om/get-state owner [:current-save-slot]))
                                                                         ["ctrl+0"]       #(om/set-state! owner [:current-save-slot] 0)
                                                                         ["ctrl+1"]       #(om/set-state! owner [:current-save-slot] 1)
@@ -442,7 +441,7 @@
                                (dom/input {:type      "range"
                                            :min       0
                                            :max       (max 0 (dec (count (:log data))))
-                                           :value     (get-in l-state [:states :selected])
+                                           :value     (or (get-in l-state [:states :selected]) 0)
                                            :on-change #(let [idx (reader/read-string (.. % -target -value))]
                                                          (om/set-state! owner [:states :selected] idx)
                                                          (set-app-state! idx))})
@@ -470,3 +469,88 @@
                                      {:className (when (:selected? tx) "selected-event")}
                                      (pr-str (:tx/intent tx))
                                      (when (pos? (dec (:count tx))) (str " x " (:count tx))))))))))))))))))))
+
+(defn devtools [data owner opts]
+  (reify
+    om/IDisplayName
+    (display-name [_]
+      "DatoDevtoolsContainer")
+    om/IWillMount
+    (will-mount [_]
+      (let [local-storage-state (reader/read-string (or (js/localStorage.getItem "dato-devtools") "{}"))
+            saved-keys          (set (keys local-storage-state))
+            watch-key           (gensym)]
+        (add-watch (get-in data [:dato :history]) watch-key (fn [_]
+                                                              (if (and owner (om/mounted? owner))
+                                                                (om/refresh! owner)
+                                                                (remove-watch (get-in data [:dato :history]) watch-key))))
+        (om/set-state! owner {:watch-key     watch-key
+                              :ext-devtools? (if (get saved-keys :ext-devtools?)
+                                               (:ext-devtools? local-storage-state)
+                                               (:ext-devtools? opts))
+                              :open?         (if (get saved-keys :open?)
+                                               (:open? local-storage-state)
+                                               (:open? opts))})))
+    om/IWillUnmount
+    (will-unmount [_]
+      (let [watch-key (om/get-state owner :watch-key)]
+        (remove-watch (get-in data [:dato :history]) watch-key)))
+    om/IDidUpdate
+    (did-update [_ _ prev]
+      (let [l-state      (om/get-state owner)
+            popping-out? (and (or (not (:ext-devtools? prev))
+                                  (not (:open? prev)))
+                              (and (:ext-devtools? l-state)
+                                   (:open? l-state)))
+            popping-in?  (and (:ext-devtools? prev)
+                              (or (not (:ext-devtools? l-state))
+                                  (not (:open? l-state))))
+            ext-win      (if popping-out?
+                           (do
+                             (let [win (.open js/window nil, "dato-devtools", "menubar=no,location=no,resizable=yes,scrollbars=no,status=no")]
+                               (set! (.-onclose win) (fn [] (om/set-state! owner [:ext-devtools?] false)))
+                               (.. win -location reload)
+                               ;; None of this seems to work to
+                               ;; prevent the devtools from stealing
+                               ;; focus.
+                               (js/setTimeout #(do (.focus js/window)
+                                                   (.blur win)) 2050)
+                               (om/set-state-nr! owner :ext-win win)
+                               win))
+                           (:ext-win l-state))
+            ext-child    (:ext-child l-state)
+            child        (:child l-state)
+            to-save-state {:ext-devtools? (:ext-devtools? l-state)
+                           :open?         (:open? l-state)}]
+        (js/localStorage.setItem "dato-devtools" (pr-str to-save-state))
+        (when (and popping-in? ext-win)
+          (om/set-state-nr! owner :ext-win nil)
+          (.close ext-win))
+        (cond
+          (and popping-out? ext-win) (js/setTimeout
+                                      #(om/set-state! owner :ext-child (om/root devtools* (get-in data [:dato :history])
+                                                                                {:target (.. ext-win -document -body)
+                                                                                 :shared (om/get-shared owner)
+                                                                                 :opts   opts}))
+                                      10)
+          (and ext-win ext-child) (om/refresh! ext-child))))
+    om/IRender
+    (render [_]
+      (let [l-state (om/get-state owner)
+            open?   (:open? l-state)]
+        (dom/div
+         {:style {:display (when-not open? "none")}}
+         (om/build keyboard/keyboard-handler {} {:opts {:keymap (atom {["ctrl+slash"] #(om/update-state! owner [:open?] not)})}})
+         (when open?
+           (dom/button
+            {:on-click #(om/update-state! owner [:ext-devtools?] not)}
+            (if (:ext-devtools? l-state)
+              (dom/div
+               {:style {:position "fixed"
+                        :bottom   0
+                        :left     0}}
+               "⤶")
+              "⤴")))
+         (when open?
+           (when-not (:ext-devtools? l-state)
+             (om/build devtools* @(get-in data [:dato :history]) {:opts opts}))))))))
