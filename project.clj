@@ -25,6 +25,9 @@
                  [com.datomic/datomic-pro "0.9.5206" :exclusions [org.slf4j/slf4j-nop org.clojure/clojure org.slf4j/log4j-over-slf4j joda-time org.slf4j/slf4j-api org.clojure/clojurescript com.fasterxml.jackson.core/jackson-core]]
                  [com.fasterxml.jackson.core/jackson-annotations "2.3.1"]
                  [com.fasterxml.jackson.core/jackson-core "2.3.1"]
+
+                 [garden "1.3.0-SNAPSHOT"]
+
                  [org.omcljs/om "0.8.8"]
                  [org.clojure/clojure "1.7.0-RC2"]
                  [org.clojure/clojurescript "1.7.122" :exclusions [org.clojure/clojure org.clojure/tools.reader org.clojure/clojurescript
