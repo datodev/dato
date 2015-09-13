@@ -153,6 +153,7 @@
                           :height   "50%"}
     [:.dato-debugger {:background-color "#eee"
                       :height "100%"}
+     [:.selected-item {:font-weight "bolder"}]
      [:.dato-selector {:cursor "pointer"}]
      [:.debugger-head
       [:button {:border-width  (px 1)
@@ -379,13 +380,11 @@
                                (dom/ul
                                 {:className "query-listing"}
                                 (for [[idx query] (map-indexed vector (:query l-state))
-                                      :let [current-query? (= (:title query) (:current-query l-state))
+                                      :let [current-query? (= idx (:current-query l-state))
                                             title (str idx ". " (:title query))]]
-                                  (dom/li {:className "dato-selector"
+                                  (dom/li {:className (str "dato-selector " (when current-query? "selected-item"))
                                            :on-click #(om/set-state! owner [:current-query] idx)}
-                                          (if current-query?
-                                            (dom/strong title)
-                                            title))))))
+                                          title)))))
                  :editor     (dom/div
                               "Code editor"
                               (dom/link {:rel      "stylesheet"
