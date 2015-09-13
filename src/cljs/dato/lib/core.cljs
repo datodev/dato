@@ -299,10 +299,11 @@
         context         (merge additional-context api {:dato dato
                                                        :ss   ss})
         update-history! (fn [tx-report]
-                          (swap! history update-in [:log] conj {:tx/intent     (get-in tx-report [:tx-meta :tx/intent])
-                                                                :time          (js/Date.)
-                                                                :tx            tx-report
-                                                                :tx/transient? (get-in tx-report [:tx-meta :tx/transient?])}))]
+                          (when (get-in tx-report [:tx-meta :tx/intent])
+                            (swap! history update-in [:log] conj {:tx/intent     (get-in tx-report [:tx-meta :tx/intent])
+                                                                  :time          (js/Date.)
+                                                                  :tx            tx-report
+                                                                  :tx/transient? (get-in tx-report [:tx-meta :tx/transient?])})))]
     ;; XXX: Uneasy with:
     ;; 1. Hard-coding history-listener here (what about other plugins?)
     ;; 2. Transactions needing history-listener-specific metadata (plugging it in now becomes difficult)
