@@ -45,6 +45,12 @@
   ([db attr value]
     (qe '[:find ?e :in $ ?a ?v :where [?e ?a ?v]] db attr value)))
 
+(defn qe-gl [db guid]
+  (qe '[:find ?e :in $ ?a ?v :where [?e ?a ?v]] db :dato/guid guid))
+
+(defn q1-gl [db guid]
+  (q1-by db :dato/guid guid))
+
 (defn qes-by
   "Return all entities by attribute existence or specific value"
   ([db attr]
@@ -65,6 +71,12 @@
 
 
 (defn touch+
+  "By default, touch returns a map that can't be assoc'd. Fix it"
+  [ent]
+  ;; (into {}) makes the map assoc'able, but lacks a :db/id, which is annoying for later lookups.
+  (into (select-keys ent [:db/id]) (d/touch ent)))
+
+(defn t
   "By default, touch returns a map that can't be assoc'd. Fix it"
   [ent]
   ;; (into {}) makes the map assoc'able, but lacks a :db/id, which is annoying for later lookups.
@@ -102,9 +114,9 @@
        {:undo true
         :can-undo? true})))
 
-(defn safe-pull [db pull-pattern entity-id]
-  (when entity-id
-    (d/pull db pull-pattern entity-id)))
-
 (defn tx-report->transaction [report]
   (mapv datom->transaction (:tx-data report)))
+
+(defn ref-attr? [db attr-name]
+  (let [attr-value-type (:db/valueType (qe-by db :db/ident attr-name))]
+    (= :db.type/ref attr-value-type)))

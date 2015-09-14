@@ -3,8 +3,7 @@
             [clojure.tools.logging :refer (infof)]
             [clojure.walk :as walk]
             [datomic.api :refer [q] :as d]
-            [environ.core :as config]
-            [dato.datascript-utils :as dsu])
+            [dato.db.utils :as dsu])
   (:import java.util.UUID))
 
 

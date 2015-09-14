@@ -1,5 +1,3 @@
-Note: The name (Dato) is going to change, and is just a placeholder. 
-
 # Dato
 
 Dato is an alternative approach to building apps, heavily inspired by Meteor, Firebase, and Parse, but with a strong bent towards using FP to make app design, iteration, tooling, and implementing features considerable easier. By default it comes with lag-compensation, security rules, and server-side function call. It'll eventually extensible so that e.g. offline apps, Operational Transform (Etherpad/Google Docs-like functionality), and other behaviors should be accessible and efficient.
@@ -9,26 +7,11 @@ This README is more representative of the goals/later design of Dato. Not everyt
 
 The current Data-shuffling bits are *heavily* WIP. Current work is largely focused around the ideas and possibilities (though there are lots of plans for optimizations)
 
-# Dato TodoMVC Example
+## Apps built with Dato
 
-This is an implementation of TodoMVC using Datomic on the backend to persist data that's then fed to DataScript in the frontend. The UI is driven entirely from the DataScript db (even component local state will be backed there eventually). See the Rationale for more. [Here's a video](https://dl.dropboxusercontent.com/u/412963/dato/dato_todomvc.mp4) of what it looks like once it's running
+Demo Apps:
 
-## Running this demo
-1. Install and start datomic (TODO: friendlier instructions here)
-
-2. Start the figwheel server. Figwheel compiles the frontend assets, recompiles them when the files change, and updates the browser with the changed code.
-
-   `lein figwheel` or `rlwrap lein figwheel`
-
-3. Start the web server. Export a few environment variables to get things working on your system. The dato example uses environ, so you can also define env variables in a local profiles.clj.
-
-    ```
-    export DATOMIC_LOCAL_URI="datomic:free://localhost:4334/pc2" # This will depend on your datomic setup
-    export NREPL_PORT=6005 # starts embedded nrepl server
-    export DATO_PORT=8081 # 8080 is the default value, change it if there is a port conflict
-    export PORT=10556 # 10555 is the default
-    lein run
-    ```
+ * [TodoMVC in Dato](https://github.com/sgrove/datodomvc)
 
 # Current status
 I'm extracting Dato out of a production app right now, refactoring it, and cutting away the proprietary pieces that shouldn't be in the library/framework. PR's and questions are encouraged and welcome as we work through lots of big ideas and minute details. As I continue to port more functionality from our existing app, this repo should turn from a toy example into a solid foundation.

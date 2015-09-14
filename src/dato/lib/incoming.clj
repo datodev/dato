@@ -1,6 +1,7 @@
 (ns dato.lib.incoming
   (:require [datomic.api :as d]
-            [dato.lib.datomic :as datod]))
+            [dato.lib.datomic :as datod]
+            [dato.db.utils :as dsu]))
 
 (defn ensure-pull-required-fields [pattern]
   (letfn [(ensure-fields [node]
@@ -42,7 +43,7 @@
 
 (defn cant-save-reason [datom guids db cust]
   (cond
-    (and (datod/ref-attr? db (:a datom))
+    (and (dsu/ref-attr? db (:a datom))
          (not (have-guid? datom guids))) :missing-guid
     :else nil))
 
@@ -50,16 +51,21 @@
   (group-by (fn [d] (cant-save-reason d fids db cust)) datoms))
 
 (defn datom->tx [db datom fids]
-  [(if (:added datom)
-     :db/add
-     :db/retract)
-   ;; we know that -e will be unique to each entity
-   (ds-id->tempid (:e datom))
-   (:a datom)
-   (if (and (datod/ref-attr? db (:a datom))
-            (:added datom))
-     (ds-id->tempid (:v datom))
-     (:v datom))])
+  (let [ref-attr?     (dsu/ref-attr? db (:a datom))
+        local-eid     (dsu/q1-gl db (get fids (:e datom)))
+        local-ref-eid (when ref-attr? (dsu/q1-gl db (get fids (:v datom))))]
+    [(if (:added datom)
+       :db/add
+       :db/retract)
+     ;; we know that -e will be unique to each entity
+     ;;
+     ;; Use the local id via the guid lookup if it's an existing
+     ;; entity, otherwise it's a new entity.
+     (or local-eid (ds-id->tempid (:e datom)))
+     (:a datom)
+     (if (and ref-attr? (:added datom))
+       (ds-id->tempid (:v datom))
+       (or local-ref-eid (:v datom)))]))
 
 (defn owned-txes
   "Placeholder method for now"
@@ -89,6 +95,11 @@
           (fid-txes fids)))
 
 (defn handle-transaction [conn meta datoms fids db cust]
+  (def l-stuff {:meta   meta
+                :datoms datoms
+                :fids   fids
+                :db     db
+                :cust   cust})
   (def l-meta meta)
   (let [tx-guid        (:tx/guid meta)
         grouped-datoms (group-datoms-by-cant-save datoms fids db cust)
@@ -147,7 +158,7 @@
                                         [guids eid->guids datoms]
                                         (let [[e a v tx added?] datom
                                               attr-name         (d/ident (:db-after tx-report) a)
-                                              ref-type?         (datod/ref-attr? (:db-after tx-report) attr-name)
+                                              ref-type?         (dsu/ref-attr? (:db-after tx-report) attr-name)
                                               guid              (or (:dato/guid (d/entity (:db-before tx-report) v))
                                                                     (:dato/guid (d/entity (:db-after tx-report) v)))
                                               ref-temp-id       (when ref-type?

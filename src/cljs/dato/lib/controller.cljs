@@ -7,6 +7,10 @@
   [db payload]
   (js/console.log "Unhandled transition: " (:event payload)))
 
+(defmethod transition nil
+  [db payload]
+  (throw (js/Error. (str "Cannot cast! a nil message: " (pr-str payload)))))
+
 (defmulti effect!
   (fn [context old-db new-db payload] (:event payload)))
 
