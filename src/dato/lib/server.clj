@@ -328,7 +328,7 @@
 (defn new-session-id []
   (str (UUID/randomUUID)))
 
-(defrecord DatoServer [routing-table datomic-uri]  )
+(defrecord DatoServer [routing-table datomic-uri])
 
 (defn ?assign-id [handler dato-server]
   (fn [request]
@@ -340,8 +340,13 @@
                                  (assoc-in [:session :live :dato] dato-server)))]
       response)))
 
+(defn validate-config [config]
+  (assert (:server config) "config must have a server field")
+  (assert (:port config) "config must have a port field"))
+
 (defn start! [handler config]
   (def -config config)
+  (validate-config config)
   (let [dato-server (:server config)]
     (def iw-handler
       (iw/run
@@ -352,6 +357,7 @@
             (?assign-id dato-server)
             (imw/wrap-session))
         {:path "/ws"
-         :host "0.0.0.0"}))
+         :host "0.0.0.0"
+         :port (:port config)}))
     (setup-tx-report-ch (dconn @dato-server))
     (def stop-tx-broadcast-ch (start-tx-broadcast! dato-server tx-report-mult))))
