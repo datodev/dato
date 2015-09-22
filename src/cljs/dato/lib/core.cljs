@@ -101,9 +101,8 @@
                                                      (cb reply)
                                                      (when (:event reply)
                                                        (put! dato-ch reply)))))
-                                 (if (chan? cb-or-ch)
-                                   cb-or-ch
-                                   uuid))))]
+                                 (when (chan? cb-or-ch)
+                                   cb-or-ch))))]
     {:comms    comms
      ;; Just for debugging to simulate messages coming in from the
      ;; server
