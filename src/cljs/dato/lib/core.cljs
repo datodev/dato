@@ -265,7 +265,6 @@
         (loop []
           (alt!
             dato-ch ([{:keys [sender event data] :as payload}]
-                     (js/console.log "payload" (clj->js payload))
                      (cond
                        ;; Special-case waiting on https://github.com/tonsky/datascript/issues/76
                        ;; Can eliminate this branch afterwards
