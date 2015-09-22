@@ -1,15 +1,18 @@
 (ns dato.lib.server
   (:require [clojure.core.async :as casync]
+            [clojure.tools.logging :as log]
             [cognitect.transit :as transit]
-            [datomic.api :as d]
             [dato.db.utils :as dsu]
+            [dato.lib.datomic :as datod]
+            [dato.lib.incoming :as incoming]
+            [datomic.api :as d]
             [immutant.codecs :as cdc]
+            [immutant.codecs.transit :as it]
             [immutant.web :as iw]
             [immutant.web.async :as async]
             [immutant.web.middleware :as imw]
-            [immutant.codecs.transit :as it]
-            [dato.lib.incoming :as incoming]
-            [dato.lib.datomic :as datod])
+            [talaria.api :as tal]
+            [talaria.routes :as tal-routes])
   (:import [java.net URI URLEncoder]
            [java.util UUID]))
 
@@ -25,6 +28,7 @@
 (defn datascript-datom->datom [v]
   (apply ->Datom v))
 
+;; TODO: this might be unnecessary, since talaria handles encoding messages
 (it/register-transit-codec
  :read-handlers (merge transit/default-read-handlers {"r"                (transit/read-handler (fn [s] (URI. s)))
                                                       "datascript/Datom" (transit/read-handler datascript-datom->datom)})
@@ -48,38 +52,34 @@
   {:namespace :server
    :sender    :server
    :event     event-name
+   :op        event-name
    :data      data})
 
-(defonce all-sessions
+(defonce all-sessions ^{:doc "Map of session id to session data"}
   (atom {}))
 
-(defn dato-session [session]
-  (get-in @all-sessions [(:id session)]))
+(defn all-channel-ids [session-store]
+  (keys @session-store))
 
-(defn session-server [session]
-  (let [full-session (if (:live session)
-                       session
-                       (dato-session session))
-        server (get-in full-session [:live :dato :server])]
-    (if (var? server)
-      @server
-      server)))
-
-(defn session-routes [session]
-  (let [server (session-server session)
-        routes (:routing-table server)]
-    (if (var? routes)
-      @routes
-      routes)))
-
-(defn session-db [session]
-  (let [server (session-server session)]
-    (def -session-db-session session)
-    (def -session-db-server server)
-    (ddb server)))
+(defn get-session [session-store session-id]
+  (get @session-store session-id))
 
 (defn serializable-sessions [all]
   (reduce into (map (fn [[k v]] {k (dissoc v :live)}) all)))
+
+(defn unwrap-var [maybe-var]
+  (if (var? maybe-var)
+    @maybe-var
+    maybe-var))
+
+(defn get-routing-table [dato-config]
+  (-> dato-config :server unwrap-var :routing-table unwrap-var))
+
+(defn get-dato-db [dato-config]
+  (ddb (unwrap-var (:server dato-config))))
+
+(defn get-dato-conn [dato-config]
+  (dconn (unwrap-var (:server dato-config))))
 
 (defonce tx-report-ch
   (casync/chan))
@@ -96,18 +96,15 @@
             (assert (casync/put! tx-report-ch tx)
                     "Cant put transaction on tx-report-ch")))))))
 
-(defn broadcast-tx! [dato-server sessions tx-report]
+(defn broadcast-tx! [tal-state session-store tx-report]
   (def last-tx-report tx-report)
-  (def l-dato-server dato-server)
   (let [data        (incoming/outgoing-tx-report tx-report)
         _           (def last-tx-data data)
-        payload     (ss-msg :server/database-transacted data)
-        enc-payload (cdc/encode payload :transit)]
-    (doseq [[_ session] sessions]
-      (let [ch (get-in session [:live :ch])]
-        (async/send! ch enc-payload)))))
+        message     (ss-msg :server/database-transacted data)]
+    (doseq [ch-id (all-channel-ids session-store)]
+      (tal/queue-msg! tal-state ch-id message))))
 
-(defn start-tx-broadcast! [dato-server tx-mult]
+(defn start-tx-broadcast! [tal-state session-store tx-mult]
   (let [stop-ch (casync/chan)
         tx-ch   (casync/chan)]
     (casync/tap tx-mult tx-ch)
@@ -116,12 +113,30 @@
         (casync/alt!
           tx-ch ([tx-report]
                  (println "TX-Broadcast Datoms:")
-                 (broadcast-tx! dato-server @all-sessions tx-report)
+                 (broadcast-tx! tal-state session-store tx-report)
                  (recur))
           stop-ch ([]
                    (println "Exiting tx-broadcast go-loop")
                    (casync/untap tx-mult tx-ch)))))
     stop-ch))
+
+(defn handle-websocket-msg-dispatch [tal-state dato-config session-store msg] (:op msg))
+(defmulti handle-websocket-msg #'handle-websocket-msg-dispatch)
+
+(defmethod handle-websocket-msg :default
+  [tal-state dato-config session-store msg]
+  (println "Unhandled message: " (pr-str (dissoc msg :tal/ring-req :tal/ch))))
+
+(defn start-tal-handler [tal-state dato-config session-store]
+  (future (let [q (tal/get-recv-queue tal-state)]
+            (while true
+              (let [msg (.take q)]
+                (try
+                  (handle-websocket-msg tal-state dato-config session-store msg)
+                  (catch Exception e
+                    (log/error e "Error in tal handler"))
+                  (catch AssertionError e
+                    (log/error e "Error in tal handler"))))))))
 
 (defn datomic-db->datomic-schema [db]
   (->> (d/q '[:find [?e ...]
@@ -139,172 +154,114 @@
        (reduce (fn [run entry]
                  (assoc run (:db/ident entry) entry)) {})))
 
-(defn on-open [dato-config ch]
-  (let [oc               (async/originating-request ch)
-        session          (:session oc)
-        id               (:id session)
-        others           @all-sessions
-        _                (def -last-config dato-config)
-        server           (if (var? (:server dato-config))
-                           @(:server dato-config)
-                           (:server dato-config))
-        user-db-ids      (mapv :db/id (dsu/qes-by (ddb server) :user/email))
-        full-session     {:live        {:ch   ch
-                                        :dato dato-config}
-                          :id          id
-                          :session/key id}
-        others-data      (cdc/encode (ss-msg :server/session-created {:session (dissoc full-session :live)}) :transit)
-        full-session-enc (cdc/encode (dissoc full-session :live) :transit)]
-    ;; Put new channel in global storage
-    (swap! all-sessions assoc id full-session)))
+(defmethod handle-websocket-msg :tal/channel-open
+  [tal-state dato-config session-store msg]
+  (let [id           (:tal/ch-id msg)
+        server       (if (var? (:server dato-config))
+                       @(:server dato-config)
+                       (:server dato-config))
+        user-db-ids  (mapv :db/id (dsu/qes-by (ddb server) :user/email))
+        session {:id              id
+                 :session/key     id
+                 :session/user-id (rand-nth user-db-ids)}]
+    (swap! all-sessions assoc id session)))
 
-(defn on-close [ch {:keys [code reason]}]
-  (let [oc      (async/originating-request ch)
-        session (:session oc)
-        id      (:id session)
-        others  (dissoc @all-sessions id)
-        data    (cdc/encode {:event  :server/session-destroyed
-                             :sender :server
-                             :data   {:session/key id}}
-                            :transit)]
+
+(defmethod handle-websocket-msg :tal/channel-closed
+  [tal-state dato-config session-store msg]
+  (let [id (:tal/ch-id msg)]
     (println "Closed, terminating session id: " id)
-    (swap! all-sessions dissoc id)
-    ;;(broadcast-user-org! @all-sessions session data)
-    ))
+    (swap! session-store dissoc id)))
 
-(defn default-handler [session incoming meta]
-  (println "Unhandled message: " (pr-str incoming)))
+(defn default-handler [dato-state session-id data]
+  (println "Unhandled message: " (pr-str data)))
 
-(defn on-message [ch msg]
-  (let [oc               (async/originating-request ch)
-        session          (:session oc)
-        full-session     (dato-session session)
-        routing-table    (session-routes full-session)
-        id               (:id session)
-        my-ch            (get-in @all-sessions [id :live :ch])
-        others           (dissoc @all-sessions id)
-        _                (println "Message data:" (pr-str msg))
-        raw-incoming     (cdc/decode (.getBytes msg) :transit)
-        [event msg-data] raw-incoming
-        args             (or (:args msg-data) [:place-holder])
-        ;; :place-holder is to prever failure for e.g. (log-out!),
-        ;; otherwise (:args msg-data) will be nil
-        rpc?             (boolean args)
-        _                (println "raw-incoming ffs: " (pr-str raw-incoming))
-        _                (println "\t: " (pr-str [event] :handler))
-        _                (println "Routes availabe in table: " (pr-str routing-table))
-        _                (def -last-session session)
-        _                (println "\targs: " args)
-        handler          (get-in routing-table [[event] :handler] default-handler)
-        ;; Temp hackishness
-        handler          (if (var? handler)
-                           @handler
-                           handler)
-        data             (if rpc?
-                           {:server/rpc-id (:rpc/id msg-data)
-                            :data          (apply (partial handler session all-sessions) args)}
-                           (apply (partial handler session all-sessions) (or args)))
-        _                (println "data: " (pr-str data))
-        encoded          (cdc/encode data :transit)]
-    (when data
-      (async/send! my-ch encoded))))
+(defmethod handle-websocket-msg ::dato-route
+  [tal-state dato-config session-store msg]
+  (let [routing-table (get-routing-table dato-config)
+        event         (:op msg)
+        msg-data      (:data msg)
+        handler       (get-in routing-table [[event] :handler] default-handler)
+        ;; temp hackishness
+        handler       (unwrap-var handler)
+        session-id    (:tal/ch-id msg)
+        dato-state    {:tal-state tal-state
+                       :dato-config dato-config
+                       :session-store all-sessions}
+        data          (apply handler dato-state session-id (or (:args msg-data) [:place-holder]))
+        _             (println "data: " (pr-str data))]
+    (tal/queue-reply! tal-state msg data)))
 
-(defn broadcast-other-users! [sessions session data]
-  (let [full-session (dato-session session)
-        user-id      (get-in full-session [(:session/user-id full-session)])
-        channels     (-> sessions
-                         (dissoc (:id full-session))
-                         (vals)
-                         (->>
-                          (remove #(= (:session/user-id %) user-id))
-                          (map #(get-in % [:live :ch]))))]
-    (println "broadcast-other-users! " (pr-str data))
-    (doseq [ch channels]
-      (when (async/open? ch)
-        (async/send! ch data)))))
 
-(defn bootstrap-user [session _ _]
-  (let [my-session-id (get-in @all-sessions [(:id session) :session/key])
-        full-session  (dato-session session)
-        db            (session-db full-session)
-        server        (session-server session)
-        ss            (->> (session-routes full-session)
-                           (filter (fn [[k v]] (= "ss" (namespace (first k)))))
-                           (mapv (fn [[k v]] {(first k) (dissoc v :handler)}))
-                           (reduce merge {}))]
+(defn broadcast-other-users! [dato-state session-id data]
+  (println "broadcast-other-users! " (pr-str data))
+  (doseq [ch-id (all-channel-ids (:session-store dato-state))
+          :when (not= ch-id session-id)]
+    (tal/queue-msg! (:tal-state dato-state) ch-id data)))
+
+(defn bootstrap-user [dato-state session-id _]
+  (let [db (get-dato-db (:dato-config dato-state))
+        ss (->> (get-routing-table (:dato-config dato-state))
+                (filter (fn [[k v]] (= "ss" (namespace (first k)))))
+                (mapv (fn [[k v]] {(first k) (dissoc v :handler)}))
+                (reduce merge {}))]
     (ss-msg :ss/bootstrap-succeeded
-            {:session (dissoc full-session :live)
+            ;; TODO: should probably run session through a filter of whitelisted keys
+            {:session (get-session (:session-store dato-state) session-id)
              :ss      ss
              :schema  (datomic-db->datomic-schema db)})))
 
-(defn update-session [my-session _ data]
+(defn update-session [dato-state session-id data]
   ;; XXX update-in is dangerous here, we're allowing any key the user
   ;; encodes in transit to be inserted here and to get broadcast out
   ;; to other users. Should apply a whitelist approach.
-  (let [new-session (-> (swap! all-sessions update-in [(:id my-session)] merge data)
-                        (get (:id my-session))
-                        (dissoc :live))
+  (let [new-session (-> (swap! (:session-store dato-state) update session-id merge data)
+                        (get session-id))
         data        (ss-msg :server/session-updated
-                            {:session new-session})
-        payload     (cdc/encode data :transit)
-        others      (dissoc @all-sessions (:id my-session))]
-    (doseq [[_ session] others]
-      (let [ch (get-in session [:live :ch])]
-        (async/send! ch payload)))))
+                            {:session new-session})]
+    (broadcast-other-users! dato-state session-id data)))
 
-(defn r-q [session _ incoming]
-  (println "r-q" (pr-str incoming))
+(defn r-q [dato-state session-id incoming]
   (let [q-name        (:name incoming)
         datalog-query (:q incoming)
         query-args    (:args incoming)
         data          (apply d/q datalog-query
-                             (session-db (dato-session session))
+                             (get-dato-db (:dato-config dato-state))
                              query-args)]
     (ss-msg (keyword "server" (str (name q-name) "-succeeded"))
             {:results data})))
 
-(defn r-pull [session _ incoming]
-  (println "R-pull! " (pr-str incoming))
+(defn r-pull [dato-state session-id incoming]
   (let [p-name  (:name incoming)
         pattern (incoming/ensure-pull-required-fields (:pull incoming))
-        data    (d/pull (session-db (dato-session session))
+        data    (d/pull (get-dato-db (:dato-config dato-state))
                         pattern
                         (:lookup incoming))]
     (ss-msg (keyword "server" (str (name p-name) "-succeeded"))
             {:results data})))
 
-(defn r-qes-by [session _ incoming]
+(defn r-qes-by [dato-state session-id incoming]
   (let [qes-name (:name incoming)
+        db       (get-dato-db (:dato-config dato-state))
         data     (->> (if (:v incoming)
-                        (dsu/qes-by (session-db (dato-session session))
+                        (dsu/qes-by db
                                     (:a incoming)
                                     (:v incoming))
-                        (dsu/qes-by (session-db (dato-session session))
+                        (dsu/qes-by db
                                     (:a incoming)))
                       (mapv dsu/touch+))]
     (ss-msg (keyword "server" (str (name qes-name) "-succeeded"))
             {:results data})))
 
-
-(defn handle-transaction [session _ raw]
-  (println "WTF handle-transaction: ")
-  (println "\t " session)
-  (println "\t " raw)
-  (def l-raw raw)
+(defn handle-transaction [dato-state session-id raw]
   (let [incoming     raw
-        _            (def l-incoming incoming)
-        full-session (dato-session session)
-        dato-server  (session-server full-session)
-        _            (def l-session session)
-        _            (def l-dato-server dato-server)
-        conn         (dconn dato-server)
+        conn         (get-dato-conn (:dato-config dato-state))
         datoms       (:tx-data incoming)
         tx-guid      (:tx/guid incoming)
         meta         (assoc (:tx-meta incoming) :tx/guid tx-guid)
         fids         (:fids incoming)
-        db           (ddb dato-server)
-        full-session (dato-session session)
-        user         (d/entity db (:session/user-id full-session))
+        db           (get-dato-db (:dato-config dato-state))
+        user         (d/entity db (:session/user-id (get-session (:session-store dato-state) session-id)))
         ]
     ;; If it's marked with persist, we save it and let the tx-listener broadcast out the result
     ;; Else if we see it but it's not marked with persisted,
@@ -325,39 +282,49 @@
 (defn new-routing-table [table]
   (merge default-routing-table table))
 
-(defn new-session-id []
-  (str (UUID/randomUUID)))
-
 (defrecord DatoServer [routing-table datomic-uri])
-
-(defn ?assign-id [handler dato-server]
-  (fn [request]
-    (let [id        (get-in request [:session :id] (new-session-id))
-          mouse-pos [0 0]
-          response  (handler (-> request
-                                 (assoc-in [:session :id] id)
-                                 (assoc-in [:session :mouse :pos] mouse-pos)
-                                 (assoc-in [:session :live :dato] dato-server)))]
-      response)))
 
 (defn validate-config [config]
   (assert (:server config) "config must have a server field")
   (assert (:port config) "config must have a port field"))
 
+(defn wrap-server-routes [tal-state]
+  (let [ws-setup (tal-routes/websocket-setup tal-state)
+        ajax-poll (tal-routes/ajax-poll tal-state)
+        ajax-send (tal-routes/ajax-send tal-state)]
+    (fn [req]
+      (case (:uri req)
+        "/talaria" (ws-setup req)
+        "/talaria/ajax-poll" (ajax-poll req)
+        "/talaria/ajax-send" (ajax-send req)
+        nil))))
+
+(defn set-dato-route-heirarchy!
+  "Sets route hierarchy so that the defmethod for ::dato-route will pick up all dato routes"
+  [dato-routes]
+  (doseq [route dato-routes
+          :let [route-kw (ffirst route)]]
+    (derive route-kw ::dato-route)))
+
 (defn start! [handler config]
-  (def -config config)
+  (def -dato-config config)
   (validate-config config)
-  (let [dato-server (:server config)]
-    (def iw-handler
+  (let [dato-server (:server config)
+        tal-state (tal/init :transit-reader-opts {:handlers {"r"                (transit/read-handler (fn [s] (URI. s)))
+                                                             "datascript/Datom" (transit/read-handler datascript-datom->datom)}}
+                            :transit-writer-opts {:handlers {dato.lib.server.Datom (transit/write-handler (constantly "datascript/Datom")
+                                                                                                          transit-rep)}})
+        session-store all-sessions]
+    (set-dato-route-heirarchy! (get-routing-table config))
+    (def -tal-state tal-state)
+    (def -dato-server
       (iw/run
-        (-> handler
-            (imw/wrap-websocket {:on-message (var on-message)
-                                 :on-open    (partial on-open config)
-                                 :on-close   (var on-close)})
-            (?assign-id dato-server)
+        (-> (wrap-server-routes tal-state)
+            (tal-routes/wrap-session-id)
             (imw/wrap-session))
-        {:path "/ws"
+        {:path "/"
          :host "0.0.0.0"
          :port (:port config)}))
+    (def -tal-handler (start-tal-handler tal-state config session-store))
     (setup-tx-report-ch (dconn @dato-server))
-    (def stop-tx-broadcast-ch (start-tx-broadcast! dato-server tx-report-mult))))
+    (def stop-tx-broadcast-ch (start-tx-broadcast! tal-state session-store tx-report-mult))))
