@@ -54,7 +54,6 @@
         ;; XXX: can we get rid of this?
         ss-cast!           #(put! ws-ch %)
         ;; XXX: can we get rid of this?
-        pending-rpc        (atom {})
         tal-state          (tal/init {:port dato-port
                                       :transit-reader transit-reader
                                       :transit-writer transit-writer})
@@ -93,8 +92,6 @@
                                      args     (if cb
                                                 (drop-last 1 all-args)
                                                 all-args)]
-                                 (when (fn? cb)
-                                   (swap! pending-rpc assoc uuid cb-or-ch))
                                  (tal/queue-msg! tal-state
                                                  {:op remote-name
                                                   :data {:args args}}
