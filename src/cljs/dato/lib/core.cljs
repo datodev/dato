@@ -57,9 +57,9 @@
         ;; XXX: can we get rid of this?
         tal-state          (tal/init {:port dato-port
                                       :transit-reader transit-reader
-                                      :transit-writer transit-writer})
-        _                  (tal/start-message-consumer tal-state (fn [msg]
-                                                                   (ws-message-handler dato-ch msg)))
+                                      :transit-writer transit-writer
+                                      :message-handler (fn [msg]
+                                                         (ws-message-handler dato-ch msg))})
         dato-send!         (fn [event data]
                              (tal/queue-msg! tal-state {:op event :data data}))
         controls-ch        (async/chan)
