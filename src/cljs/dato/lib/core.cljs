@@ -42,6 +42,7 @@
   (dsu/qe-by db :dato.meta/bootrapped? true))
 
 (defmulti ws-message-handler (fn [dato-ch msg] (:op msg)))
+
 (defmethod ws-message-handler :default
   [dato-ch msg]
   ;; TODO replace the dato-ch handler with this
