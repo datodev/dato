@@ -156,9 +156,7 @@
 (defmethod handle-websocket-msg :tal/channel-open
   [tal-state dato-config session-store msg]
   (let [id           (:tal/ch-id msg)
-        server       (if (var? (:server dato-config))
-                       @(:server dato-config)
-                       (:server dato-config))
+        server       (unwrap-var (:server dato-config))
         user-db-ids  (mapv :db/id (dsu/qes-by (ddb server) :user/email))
         session {:id              id
                  :session/key     id
