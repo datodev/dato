@@ -120,8 +120,7 @@
                    (casync/untap tx-mult tx-ch)))))
     stop-ch))
 
-(defn handle-websocket-msg-dispatch [tal-state dato-config session-store msg] (:op msg))
-(defmulti handle-websocket-msg #'handle-websocket-msg-dispatch)
+(defmulti handle-websocket-msg (fn [tal-state dato-config session-store msg] (:op msg)))
 
 (defmethod handle-websocket-msg :default
   [tal-state dato-config session-store msg]
