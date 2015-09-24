@@ -9,7 +9,8 @@
             [dato.lib.db :as db]
             [dato.lib.transit :as dato-transit]
             [om.core :as om]
-            [goog.Uri])
+            [goog.Uri]
+            [talaria.api :as tal])
   (:require-macros [cljs.core.async.macros :as async :refer [alt! go go-loop]])
   (:import [goog Uri]))
 
@@ -40,31 +41,27 @@
 (defn bootstrapped? [db]
   (dsu/qe-by db :dato.meta/bootrapped? true))
 
-(defn new-dato [dato-host dato-path app-db cs-schema]
+(defmulti ws-message-handler (fn [dato-ch msg] (:op msg)))
+
+(defmethod ws-message-handler :default
+  [dato-ch msg]
+  ;; TODO replace the dato-ch handler with this
+  (put! dato-ch msg))
+
+(defn new-dato [dato-host dato-port dato-path app-db cs-schema]
   (let [cast-bootstrapped? (atom false)
         ws-ch              (async/chan)
         dato-ch            (async/chan)
+        ;; XXX: can we get rid of this?
         ss-cast!           #(put! ws-ch %)
-        pending-rpc        (atom {})
-        ws                 (ws/build dato-host dato-path {:on-open    (fn [event] (js/console.log ":on-open :" event))
-                                                          :on-close   (fn [event] (js/console.log ":on-close :" event))
-                                                          :on-message (fn [event]
-                                                                        (let [fr (js/FileReader. (.-data event))]
-                                                                          (aset fr "onloadend" (fn [e]
-                                                                                                 (let [data (transit/read transit-reader (.. e -target -result))]
-                                                                                                   (if-let [cb-id (:server/rpc-id data)]
-                                                                                                     (let [cb-or-ch (get @pending-rpc cb-id)]
-                                                                                                       (swap! pending-rpc dissoc cb-id)
-                                                                                                       ;; Should we just pass the whole payload through, or just the data/results?
-                                                                                                       (cond
-                                                                                                         (chan? cb-or-ch) (put! cb-or-ch (:data data))
-                                                                                                         (fn? cb-or-ch)   (cb-or-ch (:data data))
-                                                                                                         :else            (ss-cast! (:data data))))
-                                                                                                     (ss-cast! data)))))
-                                                                          (.readAsText fr (.-data event))))
-                                                          :on-error   (fn [event] (js/console.log ":on-error :" event))})
+        ;; XXX: can we get rid of this?
+        tal-state          (tal/init {:port dato-port
+                                      :transit-reader transit-reader
+                                      :transit-writer transit-writer
+                                      :message-handler (fn [msg]
+                                                         (ws-message-handler dato-ch msg))})
         dato-send!         (fn [event data]
-                             (.send ws (transit/write transit-writer [event data])))
+                             (tal/queue-msg! tal-state {:op event :data data}))
         controls-ch        (async/chan)
         comms              {:controls controls-ch
                             :stop     (async/chan)
@@ -85,35 +82,32 @@
         ss-api             (atom {})
         ;; ???: Do the perf implications of anonymous functions mean these
         ;; shouldn't be in a tight loop?
-        fn-desc->rpc       (fn fn-desc->rpc [remote-name desc]
-                             (let [f (fn [& all-args]
-                                       ;; TODO: Check if last argument is a channel, an
-                                       (let [cb-or-ch (last all-args)
-                                             cb       (cond
-                                                        (fn? cb-or-ch)   cb-or-ch
-                                                        (chan? cb-or-ch) #(put! cb-or-ch %)
-                                                        :else            false)
-                                             args     (if cb
-                                                        (drop-last 1 all-args)
-                                                        all-args)
-                                             uuid     (d/squuid)]
-                                         (when (fn? cb)
-                                           (swap! pending-rpc assoc uuid cb-or-ch))
-                                         (dato-send! remote-name {:args   args
-                                                                  :rpc/id uuid})
-                                         (if (chan? cb-or-ch)
-                                           cb-or-ch
-                                           uuid)))]
-                               f))]
+        fn-desc->rpc       (fn [remote-name desc]
+                             (fn [& all-args]
+                               ;; TODO: Check if last argument is a channel, an
+                               (let [cb-or-ch (last all-args)
+                                     cb       (cond
+                                                (fn? cb-or-ch)   cb-or-ch
+                                                (chan? cb-or-ch) #(put! cb-or-ch %)
+                                                :else            false)
+                                     args     (if cb
+                                                (drop-last 1 all-args)
+                                                all-args)]
+                                 (tal/queue-msg! tal-state
+                                                 {:op remote-name
+                                                  :data {:args args}}
+                                                 30000
+                                                 (fn [reply]
+                                                   (if (fn? cb)
+                                                     (cb reply)
+                                                     (when (:event reply)
+                                                       (put! dato-ch reply)))))
+                                 (when (chan? cb-or-ch)
+                                   cb-or-ch))))]
     {:comms    comms
      ;; Just for debugging to simulate messages coming in from the
      ;; server
      :ss-cast! ss-cast!
-     :ws       {:ch    ws-ch
-                :host  dato-host
-                :path  dato-path
-                :send! dato-send!
-                :ws    ws}
      :conn     app-db
      :db       (fn
                  ([] @(app-db))
@@ -162,93 +156,49 @@
                                (dato-send! event payload)
                                true))
                 :bootstrap! (fn []
-                              (go
-                                (js/console.log "Dato bootstrapping")
-                                ;; Bootstrap us first
-                                (loop []
-                                  (when-not (= (.-readyState ws) 1)
-                                    (<! (async/timeout 250))
-                                    (js/console.log "Dato WebSocket not ready (" (.-readyState ws) "), waiting...")
-                                    (recur)))
-                                (dato-send! :ss/bootstrap {})
-                                (js/console.log "1. Bootstrap")
-                                (let [{:keys [data] :as -rpc-response} (loop [msg (<! ws-ch)]
-                                                                         (if (= :ss/bootstrap-succeeded (get-in msg [:data :event]))
-                                                                           msg
-                                                                           ;; Not the
-                                                                           ;; message
-                                                                           ;; we're
-                                                                           ;; looking for
-                                                                           ;; (could be
-                                                                           ;; something
-                                                                           ;; during
-                                                                           ;; refreshing
-                                                                           ;; with
-                                                                           ;; figwheel. Put
-                                                                           ;; the message
-                                                                           ;; back on,
-                                                                           ;; wait a few
-                                                                           ;; ms, and try
-                                                                           ;; again. Still very racy.
-                                                                           (do
-                                                                             (put! ws-ch msg)
-                                                                             (<! (async/timeout 16))
-                                                                             (recur (<! ws-ch)))))
-                                      data                             (:data data)
-                                      _                                (js/console.log "1.5. -Bootstrap: " -rpc-response)
-                                      _                                (js/console.log "2. Bootstrap; " data)
-                                      {:keys [session-id schema]}      data]
-                                  (swap! ss-data merge (:ss data))
-                                  (reset! ss-api (->> (:ss data)
-                                                      (map (fn [[k v]]
-                                                             {(keyword (name k)) (fn-desc->rpc k v)}))
-                                                      (reduce merge {})))
-                                  (js/console.log "3. bootstrap: " app-db)
-                                  (js/console.log "4. " @ss-api)
-                                  ;; Do something with data
-                                  (let [db (let [bootstrapped? (bootstrapped? @app-db)
-                                                 conn          (if bootstrapped?
-                                                                 app-db
-                                                                 (d/create-conn (merge schema db/cs-schema cs-schema)))]
-                                             (def --fconn conn)
-                                             ;; Check if we're reloading
-                                             ;; with a pre-existing db
-                                             (when-not bootstrapped?
-                                               ;;(js/console.log (pr-str schema))
-                                               ;;(js/console.log (pr-str (vals schema)))
-                                               ;;(js/console.log "conn: " (pr-str conn))
-                                               (remove-watch app-db :global-listener)
-                                               (reset! app-db @conn)
-                                               ;;(js/console.log "me")
-                                               (doto app-db
-                                                 (db/setup-listener! :global-listener))
-                                               (let [request-transaction! (get-in @ss-api [:tx-requested])]
-                                                 (d/listen! app-db :server-tx-report
-                                                            (fn [tx-report]
-                                                              (let [datoms (tx-report->transaction tx-report)]
-                                                                ;;(js/console.log "Listened TX: " tx-report)
-                                                                (when (or (get-in tx-report [:tx-meta :tx/broadcast?])
-                                                                          (get-in tx-report [:tx-meta :tx/persist?]))
-                                                                  (let [prepped (db/prep-broadcastable-tx-report tx-report)]
-                                                                    (when @network-enabled?
-                                                                      (request-transaction! prepped))))))))
-                                               (let [local-session-id (d/tempid :db.part/user)
-                                                     local-session-tx [{:db/id                 (d/tempid :db.part/user)
-                                                                        :dato.meta/bootrapped? true}
-                                                                       ;; TODO: This can likely be moved out to a user-land handler
-                                                                       (assoc (:session data) :db/id local-session-id)
-                                                                       {:local/current-session {:db/id local-session-id}}]]
-                                                 (d/transact! app-db (vals schema))
-                                                 (d/transact! app-db local-session-tx))
-                                               (reset! cast-bootstrapped? true))
-                                             conn)]
-                                    (put! dato-ch [:dato/bootstrap-succeeded session-id])
-                                    (loop []
-                                      (let [msg (<! ws-ch)]
-                                        ;; Should this be more sophisticated?
-                                        (when (:event msg)
-                                          (put! dato-ch msg))
-                                        (recur)))))))}}))
+                              (js/console.log "1. Bootstrap")
+                              (tal/queue-msg! tal-state {:op :ss/bootstrap}
+                                              30000
+                                              (fn [reply]
+                                                (let [{:keys [session-id schema] :as data} (:data reply)]
+                                                  (swap! ss-data merge (:ss data))
+                                                  (reset! ss-api (->> (:ss data)
+                                                                      (map (fn [[k v]]
+                                                                             {(keyword (name k)) (fn-desc->rpc k v)}))
+                                                                      (reduce merge {})))
+                                                  (let [db (let [bootstrapped? (bootstrapped? @app-db)
+                                                                 conn          (if bootstrapped?
+                                                                                 app-db
+                                                                                 (d/create-conn (merge schema db/cs-schema cs-schema)))]
+                                                             (def --fconn conn)
+                                                             ;; Check if we're reloading
+                                                             ;; with a pre-existing db
+                                                             (when-not bootstrapped?
+                                                               (remove-watch app-db :global-listener)
+                                                               (reset! app-db @conn)
+                                                               (doto app-db
+                                                                 (db/setup-listener! :global-listener))
+                                                               (let [request-transaction! (get-in @ss-api [:tx-requested])]
+                                                                 (d/listen! app-db :server-tx-report
+                                                                            (fn [tx-report]
+                                                                              (let [datoms (tx-report->transaction tx-report)]
+                                                                                (when (or (get-in tx-report [:tx-meta :tx/broadcast?])
+                                                                                          (get-in tx-report [:tx-meta :tx/persist?]))
+                                                                                  (let [prepped (db/prep-broadcastable-tx-report tx-report)]
+                                                                                    (when @network-enabled?
+                                                                                      (request-transaction! prepped))))))))
+                                                               (let [local-session-id (d/tempid :db.part/user)
+                                                                     local-session-tx [{:db/id                 (d/tempid :db.part/user)
+                                                                                        :dato.meta/bootrapped? true}
+                                                                                       ;; TODO: This can likely be moved out to a user-land handler
+                                                                                       (assoc (:session data) :db/id local-session-id)
+                                                                                       {:local/current-session {:db/id local-session-id}}]]
+                                                                 (d/transact! app-db (vals schema))
+                                                                 (d/transact! app-db local-session-tx))
+                                                               (reset! cast-bootstrapped? true))
+                                                             conn)]
+                                                    (put! dato-ch [:dato/bootstrap-succeeded session-id])
+                                                    (js/console.log "Finished bootstrap"))))))}}))
 
 ;; TODO: Probably convert to cljs Record to reify this stuff + avoid the apply shortcut
 (defn bootstrap! [dato & args]
@@ -312,38 +262,41 @@
      key
      update-history!)
     (go
-      (loop []
-        (alt!
-          dato-ch ([{:keys [sender event data] :as payload}]
-                   (cond
-                     ;; Special-case waiting on https://github.com/tonsky/datascript/issues/76
-                     ;; Can eliminate this branch afterwards
-                     (= :server/database-transacted event)
-                     (let [previous-state @conn]
-                       (def f-tx data)
-                       ;; This is the abstraction not yet supported
-                       ;; (two-phase commit, plus intermediate
-                       ;; processing)
-                       (db/consume-foreign-tx! conn data)
-                       (con/effect! context previous-state @conn payload))
-                     :else
-                     (let [previous-state @conn
-                           tx-data        (con/transition @conn payload)
-                           tx-meta        (meta tx-data)
-                           full-tx-meta   (-> (if tx-meta
-                                                tx-meta
-                                                {:tx/transient? true})
-                                              (update-in [:tx/intent] (fn [intent]
-                                                                        (or intent event))))]
-                       (when-not (:tx/transient? full-tx-meta)
-                         (js/console.log "\tevent: " (pr-str event))
-                         (js/console.log "\ttx-data: " (pr-str tx-data))
-                         (js/console.log "\ttx-meta: " (pr-str full-tx-meta)))
-                       (if tx-data
-                         (d/transact! conn tx-data full-tx-meta)
-                         (update-history! {:tx-meta full-tx-meta}))
-                       (con/effect! context previous-state @conn payload)))
-                   (recur)))))))
+      (try
+        (loop []
+          (alt!
+            dato-ch ([{:keys [sender event data] :as payload}]
+                     (cond
+                       ;; Special-case waiting on https://github.com/tonsky/datascript/issues/76
+                       ;; Can eliminate this branch afterwards
+                       (= :server/database-transacted event)
+                       (let [previous-state @conn]
+                         (def f-tx data)
+                         ;; This is the abstraction not yet supported
+                         ;; (two-phase commit, plus intermediate
+                         ;; processing)
+                         (db/consume-foreign-tx! conn data)
+                         (con/effect! context previous-state @conn payload))
+                       :else
+                       (let [previous-state @conn
+                             tx-data        (con/transition @conn payload)
+                             tx-meta        (meta tx-data)
+                             full-tx-meta   (-> (if tx-meta
+                                                  tx-meta
+                                                  {:tx/transient? true})
+                                                (update-in [:tx/intent] (fn [intent]
+                                                                          (or intent event))))]
+                         (when-not (:tx/transient? full-tx-meta)
+                           (js/console.log "\tevent: " (pr-str event))
+                           (js/console.log "\ttx-data: " (pr-str tx-data))
+                           (js/console.log "\ttx-meta: " (pr-str full-tx-meta)))
+                         (if tx-data
+                           (d/transact! conn tx-data full-tx-meta)
+                           (update-history! {:tx-meta full-tx-meta}))
+                         (con/effect! context previous-state @conn payload)))
+                     (recur))))
+        (catch js/Error e
+          (js/console.error "Error in go loop" e))))))
 
 ;; Component stuff
 

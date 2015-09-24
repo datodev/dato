@@ -53,7 +53,8 @@
                                                         ch.qos.logback/logback-classic]]
                  [org.immutant/immutant-transit "0.2.3" :exclusions [com.fasterxml.jackson.core/jackson-core]]
                  [org.postgresql/postgresql "9.3-1102-jdbc41"]
-                 [org.clojure/tools.nrepl "0.2.10"]]
+                 [org.clojure/tools.nrepl "0.2.10"]
+                 [talaria "0.1.3"]]
 
   :source-paths ["src/" "src/shared/" "yaks/datascript/src" "yaks/datascript/bench/src"]
 
