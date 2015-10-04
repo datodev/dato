@@ -218,7 +218,6 @@
       (swap! pending-datoms (fn [datoms] (apply disj datoms tx-2)))
       (d/transact! conn tx-2))
     (when-let [cb (get-in @pending-tx-info [tx-guid :tx-meta :tx/cb])]
-      
+      ;; XXX: Have to handle cb
       (swap! pending-tx-info dissoc tx-guid)
       (cb @conn))))
-

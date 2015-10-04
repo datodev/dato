@@ -8,6 +8,7 @@
             [dato.lib.websockets :as ws]
             [dato.lib.db :as db]
             [dato.lib.transit :as dato-transit]
+            [dato.lib.web-peer :as web-peer]
             [om.core :as om]
             [goog.Uri]
             [talaria.api :as tal])
@@ -46,7 +47,8 @@
 (defmethod ws-message-handler :default
   [dato-ch msg]
   ;; TODO replace the dato-ch handler with this
-  (put! dato-ch msg))
+  (when (:event msg)
+    (put! dato-ch msg)))
 
 (defn new-dato [dato-host dato-port dato-path app-db cs-schema]
   (let [cast-bootstrapped? (atom false)
@@ -104,6 +106,16 @@
                                                        (put! dato-ch reply)))))
                                  (when (chan? cb-or-ch)
                                    cb-or-ch))))]
+    (web-peer/web-peerify-conn app-db (fn [data]
+                                        (let [ch (async/chan)]
+                                          (cljs.pprint/pprint ["data is" data])
+                                          (tal/queue-msg! tal-state {:op :web-peer/transact
+                                                                     :data data}
+                                                          30000
+                                                          (fn [reply]
+                                                            (put! ch reply)))
+                                          ch)))
+    (def _app-db app-db)
     {:comms    comms
      ;; Just for debugging to simulate messages coming in from the
      ;; server
@@ -178,15 +190,20 @@
                                                                (reset! app-db @conn)
                                                                (doto app-db
                                                                  (db/setup-listener! :global-listener))
-                                                               (let [request-transaction! (get-in @ss-api [:tx-requested])]
-                                                                 (d/listen! app-db :server-tx-report
-                                                                            (fn [tx-report]
-                                                                              (let [datoms (tx-report->transaction tx-report)]
-                                                                                (when (or (get-in tx-report [:tx-meta :tx/broadcast?])
-                                                                                          (get-in tx-report [:tx-meta :tx/persist?]))
-                                                                                  (let [prepped (db/prep-broadcastable-tx-report tx-report)]
-                                                                                    (when @network-enabled?
-                                                                                      (request-transaction! prepped))))))))
+
+                                                               ;; XXX: won't need this
+                                                               ;; (let [request-transaction! (get-in @ss-api [:tx-requested])]
+                                                               ;;   (d/listen! app-db :server-tx-report
+                                                               ;;              (fn [tx-report]
+                                                               ;;                (let [datoms (tx-report->transaction tx-report)]
+                                                               ;;                  (when (or (get-in tx-report [:tx-meta :tx/broadcast?])
+                                                               ;;                            (get-in tx-report [:tx-meta :tx/persist?]))
+                                                               ;;                    (let [prepped (db/prep-broadcastable-tx-report tx-report)]
+                                                               ;;                      (when @network-enabled?
+                                                               ;;                        (request-transaction! prepped))))))))
+
+
+                                                               ;; XXX: still need this?
                                                                (let [local-session-id (d/tempid :db.part/user)
                                                                      local-session-tx [{:db/id                 (d/tempid :db.part/user)
                                                                                         :dato.meta/bootrapped? true}
@@ -195,6 +212,7 @@
                                                                                        {:local/current-session {:db/id local-session-id}}]]
                                                                  (d/transact! app-db (vals schema))
                                                                  (d/transact! app-db local-session-tx))
+
                                                                (reset! cast-bootstrapped? true))
                                                              conn)]
                                                     (put! dato-ch [:dato/bootstrap-succeeded session-id])
@@ -205,7 +223,7 @@
   (apply (get-in dato [:api :bootstrap!]) args))
 
 (defn db [dato]
-  @(:conn dato))
+  (web-peer/deref-db (:conn dato)))
 
 (defn conn [dato]
   (:conn dato))
@@ -290,8 +308,15 @@
                            (js/console.log "\tevent: " (pr-str event))
                            (js/console.log "\ttx-data: " (pr-str tx-data))
                            (js/console.log "\ttx-meta: " (pr-str full-tx-meta)))
+                         (cljs.pprint/pprint tx-data)
+                         (cljs.pprint/pprint full-tx-meta)
+                         (cljs.pprint/pprint (or (:tx/broadcast? full-tx-meta)
+                                                 (:tx/persist? full-tx-meta)))
                          (if tx-data
-                           (d/transact! conn tx-data full-tx-meta)
+                           (if (or (:tx/broadcast? full-tx-meta)
+                                   (:tx/persist? full-tx-meta))
+                             (web-peer/transact conn tx-data full-tx-meta)
+                             (d/transact! conn tx-data full-tx-meta))
                            (update-history! {:tx-meta full-tx-meta}))
                          (con/effect! context previous-state @conn payload)))
                      (recur))))

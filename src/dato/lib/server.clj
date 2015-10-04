@@ -5,6 +5,7 @@
             [dato.db.utils :as dsu]
             [dato.lib.datomic :as datod]
             [dato.lib.incoming :as incoming]
+            [dato.lib.incoming-tx :as incoming-tx]
             [datomic.api :as d]
             [immutant.codecs :as cdc]
             [immutant.codecs.transit :as it]
@@ -112,7 +113,6 @@
       (loop []
         (casync/alt!
           tx-ch ([tx-report]
-                 (println "TX-Broadcast Datoms:")
                  (broadcast-tx! tal-state session-store tx-report)
                  (recur))
           stop-ch ([]
@@ -124,7 +124,7 @@
 
 (defmethod handle-websocket-msg :default
   [tal-state dato-config session-store msg]
-  (println "Unhandled message: " (pr-str (dissoc msg :tal/ring-req :tal/ch))))
+  (log/infof "Unhandled message: %s" (pr-str (dissoc msg :tal/ring-req :tal/ch))))
 
 (defn start-tal-handler [tal-state dato-config session-store]
   (future (let [q (tal/get-recv-queue tal-state)]
@@ -167,11 +167,11 @@
 (defmethod handle-websocket-msg :tal/channel-closed
   [tal-state dato-config session-store msg]
   (let [id (:tal/ch-id msg)]
-    (println "Closed, terminating session id: " id)
+    (log/infof "Closed, terminating session id: %s" id)
     (swap! session-store dissoc id)))
 
 (defn default-handler [dato-state session-id data]
-  (println "Unhandled message: " (pr-str data)))
+  (log/infof "Unhandled message: %s" (pr-str data)))
 
 (defmethod handle-websocket-msg ::dato-route
   [tal-state dato-config session-store msg]
@@ -186,12 +186,23 @@
                        :dato-config dato-config
                        :session-store all-sessions}
         data          (apply handler dato-state session-id (or (:args msg-data) [:place-holder]))
-        _             (println "data: " (pr-str data))]
+        _             (log/infof "data: %s" (pr-str data))]
     (tal/queue-reply! tal-state msg data)))
+
+(defmethod handle-websocket-msg :web-peer/transact
+  [tal-state dato-config session-store msg]
+  (let [reply (incoming-tx/handle-txes (get-dato-conn dato-config)
+                                       {}
+                                       (-> msg :data :txes)
+                                       (-> msg :data :guids)
+                                       (get-dato-db dato-config)
+                                       nil)]
+    (clojure.pprint/pprint reply)
+    (tal/queue-reply! tal-state msg reply)))
 
 
 (defn broadcast-other-users! [dato-state session-id data]
-  (println "broadcast-other-users! " (pr-str data))
+  (log/infof "broadcast-other-users! %s" (pr-str data))
   (doseq [ch-id (all-channel-ids (:session-store dato-state))
           :when (not= ch-id session-id)]
     (tal/queue-msg! (:tal-state dato-state) ch-id data)))

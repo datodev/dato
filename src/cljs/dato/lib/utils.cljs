@@ -1,4 +1,5 @@
-(ns dato.lib.utils)
+(ns dato.lib.utils
+  (:import [goog.ui IdGenerator]))
 
 (defn dissoc-in
   "Dissociates an entry from a nested associative structure returning a new
@@ -13,3 +14,18 @@
           (dissoc m k)))
       m)
     (dissoc m k)))
+
+;; TODO: should start dato with some config that turns logging on or off
+(defn mlog [& msg]
+  (.apply (.-log js/console) js/console (clj->js msg)))
+
+(defn mwarn [& msg]
+  (.apply (.-warn js/console) js/console (clj->js msg)))
+
+(defn merror [& msg]
+  (.apply (.-error js/console) js/console (clj->js msg)))
+
+(defonce id-generator (.getInstance IdGenerator))
+
+(defn unique-id []
+  (.getNextUniqueId id-generator))
