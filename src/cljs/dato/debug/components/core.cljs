@@ -150,7 +150,8 @@
                           :left     (px 0)
                           :bottom   (px 0)
                           :width    "100%"
-                          :height   "50%"}
+                          :height   "50%"
+                          :z-index  1501}
     [:.dato-debugger {:background-color "#eee"
                       :height "100%"}
      [:.selected-item {:font-weight "bolder"}]
