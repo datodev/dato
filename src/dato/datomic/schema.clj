@@ -1,7 +1,6 @@
 (ns dato.datomic.schema
   (:require [dato.db.utils :as dsu]
-            [dato.datomic :as datod]
-            [datomic.api :refer [db q] :as d]))
+            [datomic.api :as d :refer [db q]]))
 
 (defn attribute [ident type & {:as opts}]
   (merge {:db/id                 (d/tempid :db.part/db)
@@ -64,7 +63,6 @@
                  db))
 
 (defn ensure-schema
-  ([] (ensure-schema (datod/conn)))
   ([conn]
    (let [res @(d/transact conn schema-1)
          res @(d/transact conn schema-2)

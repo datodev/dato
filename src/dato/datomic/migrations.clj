@@ -1,7 +1,6 @@
 (ns dato.datomic.migrations
-  (:require [dato.datomic :as datod]
-            [clojure.tools.logging :as log]
-            [datomic.api :refer [db q] :as d]
+  (:require [clojure.tools.logging :as log]
+            [datomic.api :as d :refer [db q]]
             [slingshot.slingshot :refer (try+ throw+)])
   (:import java.util.UUID))
 
@@ -64,5 +63,5 @@
     (migration conn)
     (update-migration-version conn version)))
 
-(defn init []
-  (run-necessary-migrations (datod/conn)))
+(defn init [conn]
+  (run-necessary-migrations conn))
