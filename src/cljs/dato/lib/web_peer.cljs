@@ -15,7 +15,7 @@
 ;;  3. What should the send-fn API look like?
 
 (defn send-txes-to-server [db-conn send-fn item]
-  (let [exploded-txes (->> (ds-utils/explode-tx-data db-conn (:txes item))
+  (let [exploded-txes (->> (ds-utils/explode-tx-data @db-conn (:txes item))
                            ;; Have to pull out tempids so that the server will know which
                            ;; frontend ids go with which id. Not a great approach :/
                            (map (fn [tx] (update tx 1 #(get-in item [:optimistic-report :tempids %] %)))))]
