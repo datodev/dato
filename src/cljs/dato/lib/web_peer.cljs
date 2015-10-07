@@ -73,7 +73,10 @@
                             ;; TODO: proper error handling
                             (assert (= item (queue/pop! q)) "send-queue lock must be broken, we lost some data!")))
                         (catch js/Error e
-                          (utils/merror e)))
+                          (let [item (queue/pop! q)]
+                            ;; TODO: better error handling
+                            (utils/mlog "Item that broke things:" item)
+                            (utils/merror e))))
                       ;; TODO: potential for infinite loop here, if item isn't popped correctly
                       (recur (peek @q))))))
       ;; TODO: Need to check for empty queue and unlock queue in same operation
