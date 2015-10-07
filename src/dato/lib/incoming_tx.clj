@@ -35,7 +35,7 @@
 (defn have-guid? [[_ e _ _] guids]
   (instance? java.util.UUID (get guids e)))
 
-(defn have-ref-guid? [[_ _ _ v] tx guids]
+(defn have-ref-guid? [[_ _ _ v] guids]
   (instance? java.util.UUID (get guids v)))
 
 (defmulti valid-db-fn? (fn [tx] (first tx)))
