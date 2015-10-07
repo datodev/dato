@@ -27,9 +27,9 @@
   (let [optimistic-txes (set (map (fn [d] [(:e d) (:a d) (:v d)]) (:tx-data optimistic-report)))
         actual-txes (set (map (fn [d] [(:e d) (:a d) (:v d)]) (:tx-data actual-report)))
         [only-optimistic only-actual _] (data/diff optimistic-txes actual-txes)]
+    (utils/mlog txes optimistic-txes actual-txes)
     (utils/mlog "Only optimisitic:" only-optimistic)
-    (utils/mlog "Only actual:" only-actual)
-    (utils/mlog "transaction:" txes)))
+    (utils/mlog "Only actual:" only-actual)))
 
 (defn get-lock-atom [db-conn]
   (-> db-conn meta ::tx-queue :lock))
@@ -116,5 +116,5 @@
   (alter-meta! db-conn (partial add-web-peer-metadata db-conn send-fn)))
 
 (defn inspect-meta [db-conn]
-  (cljs.pprint/pprint (dissoc (meta db-conn)
-                              :listeners)))
+  (js/console.log (dissoc (meta db-conn)
+                          :listeners)))

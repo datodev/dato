@@ -48,19 +48,22 @@
      (get tempids (:v datom) (:v datom))
      (:v datom))])
 
-(defn handle-transaction [conn {:keys [datoms tempid->fid]}]
+(defn handle-transaction [conn {:keys [datoms tempid->guid]}]
   (let [schema (:schema @conn)
         {adds true retracts false} (group-by :added datoms)
-        {:keys [tempids]} (d/transact! conn (map (fn [[tempid fid]]
+        ;; TODO: need a better way to create the dato/guid -> db/id mapping
+        {:keys [tempids]} (d/transact! conn (map (fn [[tempid guid]]
                                                    {:db/id tempid
-                                                    :fid fid})
-                                                 tempid->fid))]
-    (d/transact! conn (concat (map (partial datom->tx tempids schema) retracts)
-                              (vals (reduce (fn [acc d]
-                                              (update acc (:e d) (fn [m]
-                                                                   (assoc m
-                                                                          :db/id (get tempids (:e d) (:e d))
-                                                                          (:a d) (if (ref? schema (:a d))
-                                                                                   (get tempids (:v d) (:v d))
-                                                                                   (:v d))))))
-                                            {} adds))))))
+                                                    :dato/guid guid})
+                                                 tempid->guid))
+        txes (concat (map (partial datom->tx tempids schema) retracts)
+                     (vals (reduce (fn [acc d]
+                                     (update acc (:e d) (fn [m]
+                                                          (assoc m
+                                                                 :db/id (get tempids (:e d) (:e d))
+                                                                 (:a d) (if (ref? schema (:a d))
+                                                                          (get tempids (:v d) (:v d))
+                                                                          (:v d))))))
+                                   {} adds)))]
+    ;; (cljs.pprint/pprint ["txes" txes])
+    (d/transact! conn txes)))
