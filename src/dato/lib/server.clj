@@ -2,9 +2,11 @@
   (:require [clojure.core.async :as casync]
             [clojure.tools.logging :as log]
             [cognitect.transit :as transit]
+            [datascript.core]
             [dato.db.utils :as dsu]
             [dato.lib.datomic :as datod]
             [dato.lib.incoming :as incoming]
+            [dato.lib.outgoing :as outgoing]
             [dato.lib.incoming-tx :as incoming-tx]
             [datomic.api :as d]
             [immutant.codecs :as cdc]
@@ -99,10 +101,12 @@
 
 (defn broadcast-tx! [tal-state session-store tx-report]
   (def last-tx-report tx-report)
-  (let [data        (incoming/outgoing-tx-report tx-report)
-        _           (def last-tx-data data)
-        message     (ss-msg :server/database-transacted data)]
-    (doseq [ch-id (all-channel-ids session-store)]
+  (let [data          (incoming/outgoing-tx-report tx-report)
+        _             (def last-tx-data data)
+        message       (ss-msg :server/database-transacted data)
+        tx-session-id (:tx/session-id (outgoing/tx-ent tx-report))]
+    (doseq [ch-id (all-channel-ids session-store)
+            :when (not= ch-id tx-session-id)]
       (tal/queue-msg! tal-state ch-id message))))
 
 (defn start-tx-broadcast! [tal-state session-store tx-mult]
@@ -192,12 +196,11 @@
 (defmethod handle-websocket-msg :web-peer/transact
   [tal-state dato-config session-store msg]
   (let [reply (incoming-tx/handle-txes (get-dato-conn dato-config)
-                                       {}
+                                       {:tx/session-id (:tal/ch-id msg)}
                                        (-> msg :data :txes)
                                        (-> msg :data :guids)
                                        (get-dato-db dato-config)
                                        nil)]
-    (clojure.pprint/pprint reply)
     (tal/queue-reply! tal-state msg reply)))
 
 
@@ -320,8 +323,12 @@
   (let [dato-server (:server config)
         tal-state (tal/init :transit-reader-opts {:handlers {"r"                (transit/read-handler (fn [s] (URI. s)))
                                                              "datascript/Datom" (transit/read-handler datascript-datom->datom)}}
-                            :transit-writer-opts {:handlers {dato.lib.server.Datom (transit/write-handler (constantly "datascript/Datom")
-                                                                                                          transit-rep)}})
+                            :transit-writer-opts {:handlers {;; Do we still need this one?
+                                                             dato.lib.server.Datom (transit/write-handler (constantly "datascript/Datom")
+                                                                                                          transit-rep)
+                                                             datascript.core.Datom
+                                                             (transit/write-handler (constantly "datascript/Datom")
+                                                                                    (fn [d] [(:e d) (:a d) (:v d) (:tx d) (:added d)]))}})
         session-store all-sessions]
     (set-dato-route-heirarchy! (get-routing-table config))
     (def -tal-state tal-state)
