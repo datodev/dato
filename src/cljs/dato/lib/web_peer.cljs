@@ -107,7 +107,7 @@
 (defn add-web-peer-metadata [db-conn send-fn meta-data]
   (assert (empty? (::tx-queue meta-data)))
   (let [q (queue/new-queue)]
-    (queue/add-consumer q (partial maybe-send-next-item db-conn send-fn))
+    (queue/add-consumer q (fn [q-atom] (maybe-send-next-item db-conn send-fn q-atom)))
     (assoc meta-data ::tx-queue {:queue q
                                  :sending (atom #{})
                                  :lock (atom nil)})))
