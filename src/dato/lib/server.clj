@@ -8,6 +8,7 @@
             [dato.lib.incoming :as incoming]
             [dato.lib.outgoing :as outgoing]
             [dato.lib.incoming-tx :as incoming-tx]
+            [dato.lib.outgoing :as db-outgoing]
             [datomic.api :as d]
             [immutant.codecs :as cdc]
             [immutant.codecs.transit :as it]
@@ -101,7 +102,7 @@
 
 (defn broadcast-tx! [tal-state session-store tx-report]
   (def last-tx-report tx-report)
-  (let [data          (incoming/outgoing-tx-report tx-report)
+  (let [data          (db-outgoing/convert-tx-report tx-report)
         _             (def last-tx-data data)
         message       (ss-msg :server/database-transacted data)
         tx-session-id (:tx/session-id (outgoing/tx-ent tx-report))]

@@ -9,6 +9,7 @@
             [dato.lib.db :as db]
             [dato.lib.transit :as dato-transit]
             [dato.lib.web-peer :as web-peer]
+            [dato.lib.utils.db :as db-utils]
             [om.core :as om]
             [goog.Uri]
             [talaria.api :as tal])
@@ -293,7 +294,8 @@
                          ;; This is the abstraction not yet supported
                          ;; (two-phase commit, plus intermediate
                          ;; processing)
-                         (db/consume-foreign-tx! conn data)
+                         (db-utils/handle-transaction conn data)
+                         ;; (db/consume-foreign-tx! conn data)
                          (con/effect! context previous-state @conn payload))
                        :else
                        (let [previous-state @conn

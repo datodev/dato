@@ -100,6 +100,7 @@
                                 :tx-meta tx-meta})
     ;; TODO: will this cause problems? Listeners might be called twice
     ;;       Could pass in an extra bit of data to indicate that it's optimistic?
+    ;; Should only be called once if no conflicts?
     (doseq [[_ callback] @(:listeners (meta db-conn))]
       (callback optimistic-report))
     optimistic-report))
