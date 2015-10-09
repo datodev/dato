@@ -294,7 +294,6 @@
                          ;; (two-phase commit, plus intermediate
                          ;; processing)
                          (web-peer/handle-transaction conn data)
-                         ;; (db/consume-foreign-tx! conn data)
                          (con/effect! context previous-state @conn payload))
                        :else
                        (let [previous-state @conn
