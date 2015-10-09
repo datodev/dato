@@ -70,6 +70,11 @@
                           ;; TODO: handle metadata on tx
                           (let [actual-report (db-utils/handle-transaction db-conn server-reply)]
                             (handle-report-diff db-conn (:txes item) (:optimistic-report item) actual-report)
+                            (when-let [cb (get-in item [:tx-meta :tx/cb])]
+                              (try
+                                (cb actual-report)
+                                (catch js/Error e
+                                  (utils/merror "Error in tx callback" e))))
                             ;; TODO: proper error handling
                             (assert (= item (queue/pop! q)) "send-queue lock must be broken, we lost some data!")))
                         (catch js/Error e
