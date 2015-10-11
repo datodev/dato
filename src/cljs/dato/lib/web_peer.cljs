@@ -148,7 +148,6 @@
 (defn maybe-send-next-item
   "Acquires a lock and empties the queue, sending each item sequentially"
   [db-conn send-fn q]
-  ;; TODO: is it possible for items to get stuck on the queue?
   ;; TODO: do lost connections need special logic here?
   (when (lock-send-queue db-conn)
     (go
@@ -180,36 +179,51 @@
 (defn add-item-to-queue [db-conn item]
   (queue/enqueue! (get-queue-atom db-conn) item))
 
-(defn deref-db [db-conn]
+(defn deref-db
+  "Like deref, but also \"optimistically\" applies txes that haven't been confirmed by the server"
+  [db-conn]
   (reduce (fn [db queued-tx]
             (d/db-with db (:txes queued-tx)))
-          ;; TODO: is it enough to get items from the queue--are things in transit recorded there?
           @db-conn @(get-queue-atom db-conn)))
 
 (defn transact [db-conn txes & [tx-meta]]
   (let [db (deref-db db-conn)
+        ;; Dependency on earlier txes could cause cascading effects if many
+        ;; transactions are queued and there is a conflict in an early tx.
+        ;; Should optimisic-reports be recalculated if there is a diff between
+        ;; an earlier optimistic report and the actual report?
         optimistic-report (d/with db txes tx-meta)]
     (add-item-to-queue db-conn {:optimistic-report optimistic-report
                                 :txes txes
                                 :guids (make-guid-map optimistic-report)
                                 :tx-meta tx-meta})
-    ;; TODO: will this cause problems? Listeners might be called twice
-    ;;       Could pass in an extra bit of data to indicate that it's optimistic?
-    ;; Should only be called once if no conflicts?
     (doseq [[_ callback] @(:listeners (meta db-conn))]
-      (callback optimistic-report))
+      (callback (assoc optimistic-report :optimistic? true)))
     optimistic-report))
 
 (defn add-web-peer-metadata [db-conn send-fn meta-data]
   (assert (empty? (::tx-queue meta-data)))
   (let [q (queue/new-queue)]
+    ;; This is overly complicated b/c the queue we built is kind of crappy, but we have
+    ;; requirements for when things should be removed from the queue that core.async
+    ;; doesn't satisfy (we also don't like depending on core.async in a library)
     (queue/add-consumer q (fn [q-atom] (maybe-send-next-item db-conn send-fn q-atom)))
     (assoc meta-data ::tx-queue {:queue q
-                                 :sending (atom #{})
+                                 ;; lock is required so that we can send txes sequentially
                                  :lock (atom nil)})))
 
-(defn web-peerify-conn [db-conn send-fn]
+(defn web-peerify-conn
+  "Takes a datascript connection and a function to send txes to the server.
+   Modifies the ds conn's metadata to store data needed by web-peer/transact"
+  [db-conn send-fn]
   (alter-meta! db-conn (partial add-web-peer-metadata db-conn send-fn)))
+
+(defn pending-txes?
+  "Checks for pending transactions that haven't been confirmed by the server.
+   Can be used to prevent the user from leaving the page before his changes are saved."
+  [db-conn]
+  (assert (::tx-queue (meta db-conn)) "Called pending-txes? on a non-web-peerified conn")
+  (empty? @(get-queue-atom db-conn)))
 
 (defn inspect-meta [db-conn]
   (js/console.log (dissoc (meta db-conn)
