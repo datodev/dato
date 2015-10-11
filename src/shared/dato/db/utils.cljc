@@ -117,6 +117,8 @@
 (defn tx-report->transaction [report]
   (mapv datom->transaction (:tx-data report)))
 
-(defn ref-attr? [db attr-name]
-  (let [attr-value-type (:db/valueType (qe-by db :db/ident attr-name))]
-    (= :db.type/ref attr-value-type)))
+(defn ref-attr? [db attrid]
+  #?(:clj  (= :db.type/ref (:value-type (d/attribute db attrid)))
+     :cljs (-> (qe-by db :db/ident attr-name)
+               :db/valueType
+               (= :db.type/ref))))
