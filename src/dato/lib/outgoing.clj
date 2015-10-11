@@ -70,8 +70,8 @@
 (defn make-datascript-datoms [filtered-datoms db e->guid]
   (let [eid->tempid (zipmap (keys e->guid) (map (comp - inc) (range)))]
     (reduce (fn [{:keys [datoms tempid->guid]} {:keys [e a v added]}]
-              (let [ref? false ;; (dsu/ref-attr? db a)
-                    ;; TODO: figure out enums
+              (let [ref? (dsu/ref-attr? db a)
+                    ;; TODO: figure out enums, do they get sent with the schema?
                     enum? false ;; (and ref? (datomic-schema/enum-ns? a))
                     ]
                 {:datoms (conj datoms (ds/datom (eid->tempid e)
