@@ -106,9 +106,9 @@
                                                        (put! dato-ch reply)))))
                                  (when (chan? cb-or-ch)
                                    cb-or-ch))))]
+    ;; Sets up datascript db so that web-peer/transact will send txes to the server
     (web-peer/web-peerify-conn app-db (fn [data]
                                         (let [ch (async/chan)]
-                                          (cljs.pprint/pprint ["data is" data])
                                           (tal/queue-msg! tal-state {:op :web-peer/transact
                                                                      :data data}
                                                           30000

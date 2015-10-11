@@ -93,11 +93,14 @@
              :tempid->guid {}}
             filtered-datoms)))
 
-(defn convert-tx-report [tx-report]
+;; TODO: needs a whitelist to make sure that clients don't transact
+;;       things they shouldn't, e.g. create new attrs.
+(defn convert-tx-report
+  "Converts tx-report into a format that the client can put into its datascript db"
+  [tx-report]
   (def myreport tx-report)
   (let [tx-entity (tx-ent tx-report)]
-    (when true ;;(:tx/broadcast? tx-entity)
-      (let [e->guid (guid-map tx-report)
-            grouped-datoms (group-datoms-by-cant-broadcast (:tx-data tx-report) e->guid (:db-before tx-report) (:db-after tx-report) nil)
-            filtered-datoms (get grouped-datoms nil)]
-        (make-datascript-datoms filtered-datoms (:db-after tx-report) e->guid)))))
+    (let [e->guid (guid-map tx-report)
+          grouped-datoms (group-datoms-by-cant-broadcast (:tx-data tx-report) e->guid (:db-before tx-report) (:db-after tx-report) nil)
+          filtered-datoms (get grouped-datoms nil)]
+      (make-datascript-datoms filtered-datoms (:db-after tx-report) e->guid))))

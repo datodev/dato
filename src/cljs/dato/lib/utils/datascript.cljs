@@ -58,6 +58,12 @@
                    {:ids all-ids :genid->tempid {} :txes []} txes))))
 
 (defn explode-tx-data
+  "Converts a transaction into vector format.
+
+   Example:
+   {:db/id 10 :task/title \"hello\" :task/complete? false}
+   => [[:db/add 10 :task/title \"hello\"]
+       [:db/add 10 :task/complete? false]]"
   ([db es]
    (explode-tx-data db es []))
   ([db es results]
