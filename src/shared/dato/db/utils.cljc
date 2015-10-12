@@ -119,6 +119,6 @@
 
 (defn ref-attr? [db attrid]
   #?(:clj  (= :db.type/ref (:value-type (d/attribute db attrid)))
-     :cljs (-> (qe-by db :db/ident attr-name)
+     :cljs (-> (qe-by db :db/ident attrid)
                :db/valueType
                (= :db.type/ref))))
