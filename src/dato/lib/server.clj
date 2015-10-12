@@ -5,10 +5,8 @@
             [datascript.core]
             [dato.db.utils :as dsu]
             [dato.lib.datomic :as datod]
-            [dato.lib.incoming :as incoming]
-            [dato.lib.outgoing :as outgoing]
-            [dato.lib.incoming-tx :as incoming-tx]
-            [dato.lib.outgoing :as db-outgoing]
+            [dato.web-peer.incoming :as web-peer-incoming]
+            [dato.web-peer.outgoing :as web-peer-outgoing]
             [datomic.api :as d]
             [immutant.codecs :as cdc]
             [immutant.codecs.transit :as it]
@@ -102,10 +100,10 @@
 
 (defn broadcast-tx! [tal-state session-store tx-report]
   (def last-tx-report tx-report)
-  (let [data          (db-outgoing/convert-tx-report tx-report)
+  (let [data          (web-peer-outgoing/convert-tx-report tx-report)
         _             (def last-tx-data data)
         message       (ss-msg :server/database-transacted data)
-        tx-session-id (:tx/session-id (outgoing/tx-ent tx-report))]
+        tx-session-id (:tx/session-id (web-peer-outgoing/tx-ent tx-report))]
     (doseq [ch-id (all-channel-ids session-store)
             :when (not= ch-id tx-session-id)]
       (tal/queue-msg! tal-state ch-id message))))
@@ -196,12 +194,12 @@
 
 (defmethod handle-websocket-msg :web-peer/transact
   [tal-state dato-config session-store msg]
-  (let [reply (incoming-tx/handle-txes (get-dato-conn dato-config)
-                                       {:tx/session-id (:tal/ch-id msg)}
-                                       (-> msg :data :txes)
-                                       (-> msg :data :guids)
-                                       (get-dato-db dato-config)
-                                       nil)]
+  (let [reply (web-peer-incoming/handle-txes (get-dato-conn dato-config)
+                                             {:tx/session-id (:tal/ch-id msg)}
+                                             (-> msg :data :txes)
+                                             (-> msg :data :guids)
+                                             (get-dato-db dato-config)
+                                             nil)]
     (tal/queue-reply! tal-state msg reply)))
 
 
@@ -245,7 +243,7 @@
 
 (defn r-pull [dato-state session-id incoming]
   (let [p-name  (:name incoming)
-        pattern (incoming/ensure-pull-required-fields (:pull incoming))
+        pattern (web-peer-incoming/ensure-pull-required-fields (:pull incoming))
         data    (d/pull (get-dato-db (:dato-config dato-state))
                         pattern
                         (:lookup incoming))]
@@ -265,27 +263,8 @@
     (ss-msg (keyword "server" (str (name qes-name) "-succeeded"))
             {:results data})))
 
-(defn handle-transaction [dato-state session-id raw]
-  (let [incoming     raw
-        conn         (get-dato-conn (:dato-config dato-state))
-        datoms       (:tx-data incoming)
-        tx-guid      (:tx/guid incoming)
-        meta         (assoc (:tx-meta incoming) :tx/guid tx-guid)
-        fids         (:fids incoming)
-        db           (get-dato-db (:dato-config dato-state))
-        user         (d/entity db (:session/user-id (get-session (:session-store dato-state) session-id)))
-        ]
-    ;; If it's marked with persist, we save it and let the tx-listener broadcast out the result
-    ;; Else if we see it but it's not marked with persisted,
-    ;; the intent must be to transact it into the in-memory datomic instance, and broadcast out the result of that
-    (cond
-      (:tx/persist? meta) (incoming/handle-transaction conn meta datoms fids db user)
-      ;;(:tx/persist meta) (incoming/handle-transaction conn datoms fids db user)
-      )))
-
 (def default-routing-table
   {[:session/updated] {:handler #'update-session}
-   [:ss/tx-requested] {:handler #'handle-transaction}
    [:ss/r-q]          {:handler #'r-q}
    [:ss/r-qes-by]     {:handler #'r-qes-by}
    [:ss/r-pull]       {:handler #'r-pull}

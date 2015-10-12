@@ -1,8 +1,8 @@
-(ns dato.lib.incoming-tx
+(ns dato.web-peer.incoming
   (:require [clojure.string :as str]
             [datomic.api :as d]
             [dato.db.utils :as dsu]
-            [dato.lib.outgoing :as db-outgoing]))
+            [dato.web-peer.outgoing :as web-peer-outgoing]))
 
 (defn ensure-pull-required-fields [pattern]
   (letfn [(ensure-fields [node]
@@ -22,15 +22,8 @@
                       (update-in run [k] ensure-fields)) field (keys field)))]
     (ensure-fields pattern)))
 
-(def attr-whitelist #{:entity/type})
-
-(def edit-whitelist #{})
-
 (defn ds-id->tempid [ds-id]
   (d/tempid :db.part/user (- ds-id)))
-
-(defn whitelisted? [datom]
-  (contains? attr-whitelist (:a datom)))
 
 (defn have-guid? [[_ e _ _] guids]
   (instance? java.util.UUID (get guids e)))
@@ -110,11 +103,14 @@
     (def myincoming incoming-txes)
     (def mygroupedtxes grouped-txes)
     (def mytxtxes filtered-txes)
+    (def mytxes txes)
+    (def mymeta meta)
+    (def myconn conn)
     (if (seq filtered-txes)
       (let [report @(d/transact conn (conj txes (merge {:db/id (d/tempid :db.part/tx)}
                                                        ;; Do we merge meta here?
                                                        meta)))]
         (def myreport report)
-        (merge (db-outgoing/convert-tx-report report)
+        (merge (web-peer-outgoing/convert-tx-report report)
                {:rejected-txes bad-txes}))
       {:rejected-txes bad-txes})))

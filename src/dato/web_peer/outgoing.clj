@@ -1,4 +1,4 @@
-(ns dato.lib.outgoing
+(ns dato.web-peer.outgoing
   (:require [clojure.string :as str]
             [datascript.core :as ds]
             [datomic.api :as d]
@@ -56,12 +56,11 @@
       (assoc guid-map v (find-guid tx-report v)))
     guid-map))
 
-(defn guid-map [tx-report]
+(defn make-guid-map [tx-report]
   (reduce (fn [acc {:keys [e a v]}]
             (-> acc
               (add-entity-guid tx-report e)
-              ;; (add-ref-guid tx-report a v)
-              ))
+              (add-ref-guid tx-report a v)))
           {} (:tx-data tx-report)))
 
 (defn tx-ent [tx-report]
@@ -77,9 +76,7 @@
                 {:datoms (conj datoms (ds/datom (eid->tempid e)
                                                 (d/ident db a)
                                                 (if ref?
-                                                  (if enum?
-                                                    (d/ident db v)
-                                                    (eid->tempid v))
+                                                  (eid->tempid v)
                                                   v)
                                                 1 ;; this'll be ignored
                                                 added))
@@ -100,7 +97,7 @@
   [tx-report]
   (def myreport tx-report)
   (let [tx-entity (tx-ent tx-report)]
-    (let [e->guid (guid-map tx-report)
+    (let [e->guid (make-guid-map tx-report)
           grouped-datoms (group-datoms-by-cant-broadcast (:tx-data tx-report) e->guid (:db-before tx-report) (:db-after tx-report) nil)
           filtered-datoms (get grouped-datoms nil)]
       (make-datascript-datoms filtered-datoms (:db-after tx-report) e->guid))))
