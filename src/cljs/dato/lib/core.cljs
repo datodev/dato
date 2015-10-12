@@ -47,7 +47,8 @@
 (defmethod ws-message-handler :default
   [dato-ch msg]
   ;; TODO replace the dato-ch handler with this
-  (when (:event msg)
+
+  (when (:event msg) ;; Make sure incoming event is consumable by dato
     (put! dato-ch msg)))
 
 (defn new-dato [dato-host dato-port dato-path app-db cs-schema]

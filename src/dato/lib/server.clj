@@ -46,7 +46,7 @@
 
 (defn user-db
   "Currently a placeholder for a filtered-db with only datoms the
-  given user is allowed to *read* (writing security is separate)8"
+  given user is allowed to *read* (writing security is separate)"
   [db session]
   db)
 
@@ -63,6 +63,7 @@
 (defn all-channel-ids [session-store]
   (keys @session-store))
 
+;; ??? Should this take session-store or dato-state
 (defn get-session [session-store session-id]
   (get @session-store session-id))
 
