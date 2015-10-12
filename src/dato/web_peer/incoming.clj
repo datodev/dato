@@ -68,8 +68,6 @@
 
           (and (= :normal tx-type)
                (dsu/ref-attr? db a)
-               ;; TODO: support for enum (or should enums also get a guid?)
-               ;; (not (datomic-schema/enum-ns? a))
                (not (have-ref-guid? tx guids)))
           :missing-guid-for-ref-value
 

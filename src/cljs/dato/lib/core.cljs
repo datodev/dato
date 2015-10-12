@@ -192,19 +192,6 @@
                                                                (doto app-db
                                                                  (db/setup-listener! :global-listener))
 
-                                                               ;; XXX: won't need this
-                                                               ;; (let [request-transaction! (get-in @ss-api [:tx-requested])]
-                                                               ;;   (d/listen! app-db :server-tx-report
-                                                               ;;              (fn [tx-report]
-                                                               ;;                (let [datoms (tx-report->transaction tx-report)]
-                                                               ;;                  (when (or (get-in tx-report [:tx-meta :tx/broadcast?])
-                                                               ;;                            (get-in tx-report [:tx-meta :tx/persist?]))
-                                                               ;;                    (let [prepped (db/prep-broadcastable-tx-report tx-report)]
-                                                               ;;                      (when @network-enabled?
-                                                               ;;                        (request-transaction! prepped))))))))
-
-
-                                                               ;; XXX: still need this?
                                                                (let [local-session-id (d/tempid :db.part/user)
                                                                      local-session-tx [{:db/id                 (d/tempid :db.part/user)
                                                                                         :dato.meta/bootrapped? true}

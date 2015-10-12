@@ -25,9 +25,7 @@
         (not (have-guid? datom e->guid))
         :missing-guid
 
-        (and false ;; (dsu/ref-attr? db-after (:a datom))
-             ;; TODO: support for enum (or should enums also get a guid?)
-             ;; (not (datomic-schema/enum-ns? (:a datom)))
+        (and (dsu/ref-attr? db-after (:a datom))
              (not (have-ref-guid? datom e->guid)))
         :missing-guid-for-ref-value
 
@@ -46,14 +44,10 @@
 (defn add-entity-guid [guid-map tx-report e]
   (if (contains? guid-map e)
     guid-map
-    ;; TODO: write retractEntity fn that preserves fid
     (assoc guid-map e (find-guid tx-report e))))
 
 (defn add-ref-guid [guid-map tx-report a v]
-  (if (and (dsu/ref-attr? (:db-after tx-report) a)
-           ;; TODO: support for enum (or should enums also get a guid?)
-           ;; (not (datomic-schema/enum-ns? a))
-           )
+  (if (dsu/ref-attr? (:db-after tx-report) a)
     (if (contains? guid-map v)
       guid-map
       (assoc guid-map v (find-guid tx-report v)))
@@ -72,10 +66,7 @@
 (defn make-datascript-datoms [filtered-datoms db e->guid]
   (let [eid->tempid (zipmap (keys e->guid) (map (comp - inc) (range)))]
     (reduce (fn [{:keys [datoms tempid->guid]} {:keys [e a v added]}]
-              (let [ref? (dsu/ref-attr? db a)
-                    ;; TODO: figure out enums, do they get sent with the schema?
-                    enum? false ;; (and ref? (datomic-schema/enum-ns? a))
-                    ]
+              (let [ref? (dsu/ref-attr? db a)]
                 {:datoms (conj datoms (ds/datom (eid->tempid e)
                                                 (d/ident db a)
                                                 (if ref?
@@ -87,7 +78,7 @@
                                  true
                                  (assoc (eid->tempid e) (e->guid e))
 
-                                 (and ref? (not enum?))
+                                 ref?
                                  (assoc (eid->tempid v) (e->guid v)))}))
             {:datoms []
              :tempid->guid {}}

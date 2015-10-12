@@ -8,20 +8,15 @@
             [dato.lib.utils.queue :as queue])
   (:require-macros [cljs.core.async.macros :refer (go)]))
 
-;; TODOS:
-;;  1. Figure out how to execute transact over the websocket
-;;  2. Figure how how new data is transacted into the ds db
-;;  3. What should the send-fn API look like?
-
 (defn send-txes-to-server [db-conn send-fn item]
   (let [exploded-txes (->> (ds-utils/explode-tx-data @db-conn (:txes item))
                            ;; Have to pull out tempids so that the server will know which
                            ;; frontend ids go with which id. Not a great approach :/
                            (map (fn [tx] (update tx 1 #(get-in item [:optimistic-report :tempids %] %)))))]
-    ;; TODO: is send-fn doing what I expect?
     (send-fn {:txes exploded-txes
               :guids (:guids item)})))
 
+;; TODO: handle-report-diff should be delegated to the client
 (defn handle-report-diff [conn txes optimistic-report actual-report]
   (let [optimistic-txes (set (map (fn [d] [(:e d) (:a d) (:v d)]) (:tx-data optimistic-report)))
         actual-txes (set (map (fn [d] [(:e d) (:a d) (:v d)]) (:tx-data actual-report)))
@@ -72,7 +67,6 @@
   [guid-map tx-report e]
   (if (contains? guid-map e)
     guid-map
-    ;; TODO: write retractEntity fn that preserves fid
     (assoc guid-map e (find-guid tx-report e))))
 
 (defn add-ref-guid
