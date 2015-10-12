@@ -19,7 +19,10 @@
   (instance? java.util.UUID (e->guid (:v datom))))
 
 (defn cant-broadcast-reason [datom e->guid db-before db-after cust]
-  (cond (not (have-guid? datom e->guid))
+  (cond (= (:e datom) (:tx datom))
+        :transaction-annotation
+
+        (not (have-guid? datom e->guid))
         :missing-guid
 
         (and false ;; (dsu/ref-attr? db-after (:a datom))
