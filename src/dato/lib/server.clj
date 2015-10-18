@@ -2,9 +2,11 @@
   (:require [clojure.core.async :as casync]
             [clojure.tools.logging :as log]
             [cognitect.transit :as transit]
+            [datascript.core]
             [dato.db.utils :as dsu]
             [dato.lib.datomic :as datod]
-            [dato.lib.incoming :as incoming]
+            [dato.web-peer.incoming :as web-peer-incoming]
+            [dato.web-peer.outgoing :as web-peer-outgoing]
             [datomic.api :as d]
             [immutant.codecs :as cdc]
             [immutant.codecs.transit :as it]
@@ -99,10 +101,12 @@
 
 (defn broadcast-tx! [tal-state session-store tx-report]
   (def last-tx-report tx-report)
-  (let [data        (incoming/outgoing-tx-report tx-report)
-        _           (def last-tx-data data)
-        message     (ss-msg :server/database-transacted data)]
-    (doseq [ch-id (all-channel-ids session-store)]
+  (let [data          (web-peer-outgoing/convert-tx-report tx-report)
+        _             (def last-tx-data data)
+        message       (ss-msg :server/database-transacted data)
+        tx-session-id (:tx/session-id (web-peer-outgoing/tx-ent tx-report))]
+    (doseq [ch-id (all-channel-ids session-store)
+            :when (not= ch-id tx-session-id)]
       (tal/queue-msg! tal-state ch-id message))))
 
 (defn start-tx-broadcast! [tal-state session-store tx-mult]
@@ -113,7 +117,6 @@
       (loop []
         (casync/alt!
           tx-ch ([tx-report]
-                 (println "TX-Broadcast Datoms:")
                  (broadcast-tx! tal-state session-store tx-report)
                  (recur))
           stop-ch ([]
@@ -125,7 +128,7 @@
 
 (defmethod handle-websocket-msg :default
   [tal-state dato-config session-store msg]
-  (println "Unhandled message: " (pr-str (dissoc msg :tal/ring-req :tal/ch))))
+  (log/infof "Unhandled message: %s" (pr-str (dissoc msg :tal/ring-req :tal/ch))))
 
 (defn start-tal-handler [tal-state dato-config session-store]
   (future (let [q (tal/get-recv-queue tal-state)]
@@ -168,11 +171,11 @@
 (defmethod handle-websocket-msg :tal/channel-closed
   [tal-state dato-config session-store msg]
   (let [id (:tal/ch-id msg)]
-    (println "Closed, terminating session id: " id)
+    (log/infof "Closed, terminating session id: %s" id)
     (swap! session-store dissoc id)))
 
 (defn default-handler [dato-state session-id data]
-  (println "Unhandled message: " (pr-str data)))
+  (log/infof "Unhandled message: %s" (pr-str data)))
 
 (defmethod handle-websocket-msg ::dato-route
   [tal-state dato-config session-store msg]
@@ -187,12 +190,22 @@
                        :dato-config dato-config
                        :session-store all-sessions}
         data          (apply handler dato-state session-id (or (:args msg-data) [:place-holder]))
-        _             (println "data: " (pr-str data))]
+        _             (log/infof "data: %s" (pr-str data))]
     (tal/queue-reply! tal-state msg data)))
+
+(defmethod handle-websocket-msg :web-peer/transact
+  [tal-state dato-config session-store msg]
+  (let [reply (web-peer-incoming/handle-txes (get-dato-conn dato-config)
+                                             {:tx/session-id (:tal/ch-id msg)}
+                                             (-> msg :data :txes)
+                                             (-> msg :data :guids)
+                                             (get-dato-db dato-config)
+                                             nil)]
+    (tal/queue-reply! tal-state msg reply)))
 
 
 (defn broadcast-other-users! [dato-state session-id data]
-  (println "broadcast-other-users! " (pr-str data))
+  (log/infof "broadcast-other-users! %s" (pr-str data))
   (doseq [ch-id (all-channel-ids (:session-store dato-state))
           :when (not= ch-id session-id)]
     (tal/queue-msg! (:tal-state dato-state) ch-id data)))
@@ -231,7 +244,7 @@
 
 (defn r-pull [dato-state session-id incoming]
   (let [p-name  (:name incoming)
-        pattern (incoming/ensure-pull-required-fields (:pull incoming))
+        pattern (web-peer-incoming/ensure-pull-required-fields (:pull incoming))
         data    (d/pull (get-dato-db (:dato-config dato-state))
                         pattern
                         (:lookup incoming))]
@@ -251,27 +264,8 @@
     (ss-msg (keyword "server" (str (name qes-name) "-succeeded"))
             {:results data})))
 
-(defn handle-transaction [dato-state session-id raw]
-  (let [incoming     raw
-        conn         (get-dato-conn (:dato-config dato-state))
-        datoms       (:tx-data incoming)
-        tx-guid      (:tx/guid incoming)
-        meta         (assoc (:tx-meta incoming) :tx/guid tx-guid)
-        fids         (:fids incoming)
-        db           (get-dato-db (:dato-config dato-state))
-        user         (d/entity db (:session/user-id (get-session (:session-store dato-state) session-id)))
-        ]
-    ;; If it's marked with persist, we save it and let the tx-listener broadcast out the result
-    ;; Else if we see it but it's not marked with persisted,
-    ;; the intent must be to transact it into the in-memory datomic instance, and broadcast out the result of that
-    (cond
-      (:tx/persist? meta) (incoming/handle-transaction conn meta datoms fids db user)
-      ;;(:tx/persist meta) (incoming/handle-transaction conn datoms fids db user)
-      )))
-
 (def default-routing-table
   {[:session/updated] {:handler #'update-session}
-   [:ss/tx-requested] {:handler #'handle-transaction}
    [:ss/r-q]          {:handler #'r-q}
    [:ss/r-qes-by]     {:handler #'r-qes-by}
    [:ss/r-pull]       {:handler #'r-pull}
@@ -310,8 +304,12 @@
   (let [dato-server (:server config)
         tal-state (tal/init :transit-reader-opts {:handlers {"r"                (transit/read-handler (fn [s] (URI. s)))
                                                              "datascript/Datom" (transit/read-handler datascript-datom->datom)}}
-                            :transit-writer-opts {:handlers {dato.lib.server.Datom (transit/write-handler (constantly "datascript/Datom")
-                                                                                                          transit-rep)}})
+                            :transit-writer-opts {:handlers {;; Do we still need this one?
+                                                             dato.lib.server.Datom (transit/write-handler (constantly "datascript/Datom")
+                                                                                                          transit-rep)
+                                                             datascript.core.Datom
+                                                             (transit/write-handler (constantly "datascript/Datom")
+                                                                                    (fn [d] [(:e d) (:a d) (:v d) (:tx d) (:added d)]))}})
         session-store all-sessions]
     (set-dato-route-heirarchy! (get-routing-table config))
     (def -tal-state tal-state)
