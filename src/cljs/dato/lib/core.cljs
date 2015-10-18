@@ -292,14 +292,6 @@
                                                   {:tx/transient? true})
                                                 (update-in [:tx/intent] (fn [intent]
                                                                           (or intent event))))]
-                         (when-not (:tx/transient? full-tx-meta)
-                           (js/console.log "\tevent: " (pr-str event))
-                           (js/console.log "\ttx-data: " (pr-str tx-data))
-                           (js/console.log "\ttx-meta: " (pr-str full-tx-meta)))
-                         (cljs.pprint/pprint tx-data)
-                         (cljs.pprint/pprint full-tx-meta)
-                         (cljs.pprint/pprint (or (:tx/broadcast? full-tx-meta)
-                                                 (:tx/persist? full-tx-meta)))
                          (if tx-data
                            (if (or (:tx/broadcast? full-tx-meta)
                                    (:tx/persist? full-tx-meta))
