@@ -298,6 +298,17 @@
           :let [route-kw (ffirst route)]]
     (derive route-kw ::dato-route)))
 
+(defn add-route-watcher [dato-config]
+  "Adds new routes to route hieracry if the var changes. Useful for development."
+  (let [routing-table (-> dato-config :server unwrap-var :routing-table)]
+    (when (var? routing-table)
+      (add-watch routing-table ::hierarchy-watcher (fn [_ _ _ new-routes]
+                                                     (doseq [route new-routes
+                                                             :let [route-kw (ffirst route)]]
+                                                       (when-not (isa? route-kw ::dato-route)
+                                                         (log/infof "Adding %s to the dato routing table" route-kw)
+                                                         (derive route-kw ::dato-route))))))))
+
 (defn start! [handler config]
   (def -dato-config config)
   (validate-config config)
@@ -312,6 +323,7 @@
                                                                                     (fn [d] [(:e d) (:a d) (:v d) (:tx d) (:added d)]))}})
         session-store all-sessions]
     (set-dato-route-heirarchy! (get-routing-table config))
+    (add-route-watcher config)
     (def -tal-state tal-state)
     (def -dato-server
       (iw/run
