@@ -77,9 +77,12 @@
   (group-by (fn [tx] (cant-save-tx-reason tx guids db cust)) txes))
 
 (defn guid-txes [guids]
-  (map (fn [[ds-id guid]]
-         [:db/add (ds-id->tempid ds-id) :dato/guid guid])
-       guids))
+  (let [r (map (fn [[ds-id guid]]
+                 [:db/add (ds-id->tempid ds-id) :dato/guid guid])
+               guids)]
+    (def -gt-guids guids)
+    (def -gt-r r)
+    r))
 
 (defn fill-txes [filtered-txes guids db cust]
   (let [guids-to-use (atom guids)]
@@ -88,15 +91,20 @@
                             (do
                               (swap! guids-to-use dissoc (second tx))
                               [(first tx) [:dato/guid (get guids (second tx))]])
-                            (update tx 1 ds-id->tempid)))
+                            (as-> (update tx 1 ds-id->tempid) tx
+                              (if (dsu/ref-attr? db (nth tx 2))
+                                ;; XXX: @dwwoelfel: This has to check for other arities (e.g. :db.fn/retractEntity)
+                                (update tx 3 ds-id->tempid)
+                                tx))))
                         filtered-txes))
             (guid-txes @guids-to-use))))
 
 (defn handle-txes [conn meta incoming-txes guids db cust]
-  (let [grouped-txes (group-txes-by-cant-save incoming-txes guids db cust)
+  (let [grouped-txes  (group-txes-by-cant-save incoming-txes guids db cust)
         filtered-txes (get grouped-txes nil)
-        bad-txes (dissoc grouped-txes nil)
-        txes (fill-txes filtered-txes guids db cust)]
+        bad-txes      (dissoc grouped-txes nil)
+        txes          (fill-txes filtered-txes guids db cust)]
+    (def mybadtxes bad-txes)
     (def myguids guids)
     (def myincoming incoming-txes)
     (def mygroupedtxes grouped-txes)
