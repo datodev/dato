@@ -10,11 +10,13 @@
           :let   [reverse?   (dc/reverse-ref? a)
                   straight-a (if reverse? (dc/reverse-ref a) a)]
           v      (dc/maybe-wrap-multival db a vs)]
-      (if (and (dc/ref? db straight-a) (map? v)) ;; another entity specified as nested map
-        (assoc v (dc/reverse-ref a) eid)
-        (if reverse?
-          [:db/add v   straight-a eid]
-          [:db/add eid straight-a v])))))
+      (if (nil? v)
+        (raise "value for attribute cannot be nil" {:error :transact/format :entity entity :attribute a})
+        (if (and (dc/ref? db straight-a) (map? v)) ;; another entity specified as nested map
+          (assoc v (dc/reverse-ref a) eid)
+          (if reverse?
+            [:db/add v   straight-a eid]
+            [:db/add eid straight-a v]))))))
 
 (defn maybe-replace-temp-id [{:keys [ids genid->tempid tx]}]
   (if (number? (second tx))
@@ -78,7 +80,7 @@
        (map? entity)
        (let [eid (or (:db/id entity)
                      ;; Just need something unique, replace it with a negative number later
-                     (js-obj))
+                     (js-obj "id-placeholder" true))
              new-entity  (assoc entity :db/id eid)]
          (recur db
                 (concat entities (explode-entity db new-entity))
