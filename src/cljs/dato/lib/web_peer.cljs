@@ -12,8 +12,13 @@
   (let [exploded-txes (->> (ds-utils/explode-tx-data @db-conn (:txes item))
                            ;; Have to pull out tempids so that the server will know which
                            ;; frontend ids go with which id. Not a great approach :/
-                           (map (fn [tx] (update tx 1 #(get-in item [:optimistic-report :tempids %] %)))))]
-    (send-fn {:txes exploded-txes
+                           (map (fn [tx] (update tx 1 #(get-in item [:optimistic-report :tempids %] %))))
+                           ;; XXX: @dwwoelfel: This has to check for other arities (e.g. :db.fn/retractEntity)
+                           (map (fn [tx] (update tx 3 #(get-in item [:optimistic-report :tempids %] %)))))]
+    (js/console.log "webpeer: ")
+    (js/console.log "exploded-txes: " exploded-txes)
+    (js/console.log "txs: " (:txes item))
+    (send-fn {:txes  exploded-txes
               :guids (:guids item)})))
 
 ;; TODO: handle-report-diff should be delegated to the client
