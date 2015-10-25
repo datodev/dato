@@ -133,6 +133,8 @@
      :db       (fn
                  ([] @(app-db))
                  ([conn] @(conn)))
+     ;; TODO: Will deref-ing this cause things to be slow?
+     :override-db (atom nil)
      ::ss-dato ss-data
      :ss       ss-api
      :history  history
@@ -219,7 +221,9 @@
   (apply (get-in dato [:api :bootstrap!]) args))
 
 (defn db [dato]
-  (web-peer/deref-db (:conn dato)))
+  ;; TODO: how to handle state not stored in the db (e.g. time)?
+  (or (some-> dato :override-db deref) ;; dev tools helper
+      (web-peer/deref-db (:conn dato))))
 
 (defn conn [dato]
   (:conn dato))

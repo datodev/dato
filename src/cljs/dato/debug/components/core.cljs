@@ -5,9 +5,10 @@
             [cljs.pprint :as pp]
             [cljs.reader :as reader]
             [clojure.string :as string]
-            [dato.lib.core :as dato]
             [dato.db.utils :as dsu]
             [dato.debug.components.keyboard-listener :as keyboard]
+            [dato.lib.core :as dato]
+            [dato.lib.db :as dato-db]
             [garden.core :as gc :refer [css]]
             [garden.selectors :as gs]
             [garden.units :as gu :refer [px pt]]
@@ -238,10 +239,9 @@
             set-app-state!      (fn [idx]
                                   (when-let [state (and (pos? log-count)
                                                         (get-in log [idx :tx :db-after]))]
-                                    (let [new-db (om/value state)
-                                          conn   (dato/conn dato)]
-                                      (reset! conn new-db)
-                                      (js/console.log "Refreshing root: " app-root)
+                                    (let [new-db (om/value state)]
+                                      (reset! (:override-db dato) new-db)
+                                      (dato-db/invalidate-all-listeners! dato)
                                       (om/refresh! app-root))))
             save-state!         (fn [_ slot-idx]
                                   (let [local-storage-name (str "dato_save_state_" slot-idx)
