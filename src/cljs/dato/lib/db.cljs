@@ -42,11 +42,10 @@
         eids  (keys (get-in @listeners [db :entity-listeners]))
         attrs (keys (get-in @listeners [db :attribute-listeners]))]
     (doseq [eid eids
-            [k callback] (get-in @listeners [db :entity-listeners])]
+            [k callback] (get-in @listeners [db :entity-listeners eid])]
       (callback {}))
     (doseq [attr attrs
-            [k callback] (get-in @listeners [db :attribute-listeners])]
-      (println k)
+            [k callback] (get-in @listeners [db :attribute-listeners attr])]
       (callback {}))))
 
 (defn handle-callbacks [db tx-report]
