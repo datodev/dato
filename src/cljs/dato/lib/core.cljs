@@ -267,6 +267,12 @@
         context         (merge additional-context api {:dato dato
                                                        :ss   ss})
         update-history! (fn [tx-report]
+                          (when-let [store-txn! (get @ss :store-session-txn!)]
+                            (store-txn! {:tx/intent     (get-in tx-report [:tx-meta :tx/intent])
+                                         :time          (js/Date.)
+                                         :tx-data       (:tx-data tx-report)
+                                         :optimistic?   (:optimistic? tx-report)
+                                         :tx/transient? (get-in tx-report [:tx-meta :tx/transient?])}))
                           (when (get-in tx-report [:tx-meta :tx/intent])
                             (swap! history update-in [:log] conj {:tx/intent     (get-in tx-report [:tx-meta :tx/intent])
                                                                   :time          (js/Date.)
