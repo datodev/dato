@@ -186,9 +186,13 @@
                                                 (let [{:keys [session-id schema] :as data} (:data reply)]
                                                   (swap! ss-data merge (:ss data))
                                                   (reset! ss-api (->> (:ss data)
-                                                                      (map (fn [[k v]]
-                                                                             {(keyword (name k)) (fn-desc->rpc k v)}))
-                                                                      (reduce merge {})))
+                                                                      (reduce (fn [acc [k v]]
+                                                                                (let [f (fn-desc->rpc k v)]
+                                                                                  (merge acc
+                                                                                         {k f}
+                                                                                         (when (= "ss" (namespace k))
+                                                                                           {(keyword (name k)) f}))))
+                                                                              {})))
                                                   (let [db (let [bootstrapped? (bootstrapped? @app-db)
                                                                  conn          (if bootstrapped?
                                                                                  app-db
@@ -253,6 +257,11 @@
 
 (defn ss [dato]
   @(:ss dato))
+
+(defn rpc-call [dato rpc-kw & args]
+  (let [f (-> dato :ss deref (get rpc-kw))]
+    (assert f (str "rpc-fn called for non-existent keyword " rpc-kw))
+    (apply f args)))
 
 (defn start-loop! [dato additional-context]
   (let [dato-ch         (get-in dato [:comms :dato])

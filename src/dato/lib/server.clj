@@ -213,7 +213,8 @@
 (defn bootstrap-user [dato-state session-id _]
   (let [db (get-dato-db (:dato-config dato-state))
         ss (->> (get-routing-table (:dato-config dato-state))
-                (filter (fn [[k v]] (= "ss" (namespace (first k)))))
+                ;; TODO: figure out if there's some security thing here (shouldn't be)
+                ;; (filter (fn [[k v]] (= "ss" (namespace (first k)))))
                 (mapv (fn [[k v]] {(first k) (dissoc v :handler)}))
                 (reduce merge {}))]
     (ss-msg :ss/bootstrap-succeeded
