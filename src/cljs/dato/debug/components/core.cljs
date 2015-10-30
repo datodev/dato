@@ -5,6 +5,7 @@
             [cljs.pprint :as pp]
             [cljs.reader :as reader]
             [clojure.string :as string]
+            [datascript :as d]
             [dato.db.utils :as dsu]
             [dato.debug.components.keyboard-listener :as keyboard]
             [dato.lib.core :as dato]
@@ -228,9 +229,17 @@
                                                                        (js/console.log "--------------------")))}}))))
     om/IRender
     (render [_]
-      (let [log                 (:log data)
+      (let [dato                (om/get-shared owner [:dato])
+                                ;; TODO: better way to switch over the logs
+            log                 (or (om/get-state owner :log-override)
+                                    (-> dato
+                                        :history
+                                        deref
+                                        :log))
+
+
             log-count           (count log)
-            dato                (om/get-shared owner [:dato])
+
             db                  (dato/db dato)
             app-root            (om/value (om/get-shared owner [:app-root]))
             selected-state-idx  (max 0 (min (or (om/get-state owner [:states :selected]) 0) log-count))
@@ -281,144 +290,144 @@
                                      :else                            (js/setTimeout #(play-all-states! (inc idx)) 1))))
             l-state             (om/get-state owner)]
         (dom/div
-         (dom/div
-          {:className "dato-debugger"}
-          (om/build keyboard/keyboard-handler {} {:opts {:keymap (atom {["ctrl+s"]       #(save-state! owner (om/get-state owner [:current-save-slot]))
-                                                                        ["ctrl+r"]       #(restore-save-state! owner (om/get-state owner [:current-save-slot]))
-                                                                        ["ctrl+0"]       #(om/set-state! owner [:current-save-slot] 0)
-                                                                        ["ctrl+1"]       #(om/set-state! owner [:current-save-slot] 1)
-                                                                        ["ctrl+2"]       #(om/set-state! owner [:current-save-slot] 2)
-                                                                        ["ctrl+3"]       #(om/set-state! owner [:current-save-slot] 3)
-                                                                        ["ctrl+4"]       #(om/set-state! owner [:current-save-slot] 4)
-                                                                        ["ctrl+5"]       #(om/set-state! owner [:current-save-slot] 5)
-                                                                        ["ctrl+6"]       #(om/set-state! owner [:current-save-slot] 6)
-                                                                        ["ctrl+7"]       #(om/set-state! owner [:current-save-slot] 7)
-                                                                        ["ctrl+8"]       #(om/set-state! owner [:current-save-slot] 8)
-                                                                        ["ctrl+9"]       #(om/set-state! owner [:current-save-slot] 9)
-                                                                        ["shift+ctrl+0"] #(do
-                                                                                            (restore-save-state! owner 0)
-                                                                                            (om/set-state! owner [:current-save-slot] 0))
-                                                                        ["shift+ctrl+1"] #(do
-                                                                                            (restore-save-state! owner 1)
-                                                                                            (om/set-state! owner [:current-save-slot] 1))
-                                                                        ["shift+ctrl+2"] #(do
-                                                                                            (restore-save-state! owner 2)
-                                                                                            (om/set-state! owner [:current-save-slot] 2))
-                                                                        ["shift+ctrl+3"] #(do
-                                                                                            (restore-save-state! owner 3)
-                                                                                            (om/set-state! owner [:current-save-slot] 3))
-                                                                        ["shift+ctrl+4"] #(do
-                                                                                            (restore-save-state! owner 4)
-                                                                                            (om/set-state! owner [:current-save-slot] 4))
-                                                                        ["shift+ctrl+5"] #(do
-                                                                                            (restore-save-state! owner 5)
-                                                                                            (om/set-state! owner [:current-save-slot] 5))
-                                                                        ["shift+ctrl+6"] #(do
-                                                                                            (restore-save-state! owner 6)
-                                                                                            (om/set-state! owner [:current-save-slot] 6))
-                                                                        ["shift+ctrl+7"] #(do
-                                                                                            (restore-save-state! owner 7)
-                                                                                            (om/set-state! owner [:current-save-slot] 7))
-                                                                        ["shift+ctrl+8"] #(do
-                                                                                            (restore-save-state! owner 8)
-                                                                                            (om/set-state! owner [:current-save-slot] 8))
-                                                                        ["shift+ctrl+9"] #(do
-                                                                                            (restore-save-state! owner 9)
-                                                                                            (om/set-state! owner [:current-save-slot] 9))})}})
           (dom/div
-           {:className     "debugger"
-            :on-mouse-move #(.stopPropagation %)}
-           (dom/div
-            (dom/style {:scoped true} debugger-styles-str)
+            {:className "dato-debugger"}
+            (om/build keyboard/keyboard-handler {} {:opts {:keymap (atom {["ctrl+s"]       #(save-state! owner (om/get-state owner [:current-save-slot]))
+                                                                          ["ctrl+r"]       #(restore-save-state! owner (om/get-state owner [:current-save-slot]))
+                                                                          ["ctrl+0"]       #(om/set-state! owner [:current-save-slot] 0)
+                                                                          ["ctrl+1"]       #(om/set-state! owner [:current-save-slot] 1)
+                                                                          ["ctrl+2"]       #(om/set-state! owner [:current-save-slot] 2)
+                                                                          ["ctrl+3"]       #(om/set-state! owner [:current-save-slot] 3)
+                                                                          ["ctrl+4"]       #(om/set-state! owner [:current-save-slot] 4)
+                                                                          ["ctrl+5"]       #(om/set-state! owner [:current-save-slot] 5)
+                                                                          ["ctrl+6"]       #(om/set-state! owner [:current-save-slot] 6)
+                                                                          ["ctrl+7"]       #(om/set-state! owner [:current-save-slot] 7)
+                                                                          ["ctrl+8"]       #(om/set-state! owner [:current-save-slot] 8)
+                                                                          ["ctrl+9"]       #(om/set-state! owner [:current-save-slot] 9)
+                                                                          ["shift+ctrl+0"] #(do
+                                                                                              (restore-save-state! owner 0)
+                                                                                              (om/set-state! owner [:current-save-slot] 0))
+                                                                          ["shift+ctrl+1"] #(do
+                                                                                              (restore-save-state! owner 1)
+                                                                                              (om/set-state! owner [:current-save-slot] 1))
+                                                                          ["shift+ctrl+2"] #(do
+                                                                                              (restore-save-state! owner 2)
+                                                                                              (om/set-state! owner [:current-save-slot] 2))
+                                                                          ["shift+ctrl+3"] #(do
+                                                                                              (restore-save-state! owner 3)
+                                                                                              (om/set-state! owner [:current-save-slot] 3))
+                                                                          ["shift+ctrl+4"] #(do
+                                                                                              (restore-save-state! owner 4)
+                                                                                              (om/set-state! owner [:current-save-slot] 4))
+                                                                          ["shift+ctrl+5"] #(do
+                                                                                              (restore-save-state! owner 5)
+                                                                                              (om/set-state! owner [:current-save-slot] 5))
+                                                                          ["shift+ctrl+6"] #(do
+                                                                                              (restore-save-state! owner 6)
+                                                                                              (om/set-state! owner [:current-save-slot] 6))
+                                                                          ["shift+ctrl+7"] #(do
+                                                                                              (restore-save-state! owner 7)
+                                                                                              (om/set-state! owner [:current-save-slot] 7))
+                                                                          ["shift+ctrl+8"] #(do
+                                                                                              (restore-save-state! owner 8)
+                                                                                              (om/set-state! owner [:current-save-slot] 8))
+                                                                          ["shift+ctrl+9"] #(do
+                                                                                              (restore-save-state! owner 9)
+                                                                                              (om/set-state! owner [:current-save-slot] 9))})}})
             (dom/div
-             {:className "debugger-head"}
-             (let [coms [{:name  :timeline
-                          :title "History"}
-                         {:name  :components
-                          :title "Components"}
-                         {:name  :states
-                          :title "Saved States"}
-                         {:name  :query
-                          :title "Expression Watch"}]]
-               (for [com-desc coms]
-                 (dom/button {:className (when (= (:tool l-state) (:name com-desc))
-                                           "selected")
-                              :on-click #(om/set-state! owner [:tool] (:name com-desc))}
-                             (:title com-desc))))
-             " - Dato Debugger")
-            (dom/div
-             (case (:tool l-state)
-               :states     (dom/div
-                            (dom/h3 "Current slot: " (:current-save-slot l-state))
-                            (dom/ul
-                             (for [slot-idx (range 1 10)]
-                               (let [local-storage-name (str "dato_save_state_" slot-idx)
-                                     existing-db        (js/localStorage.getItem local-storage-name)]
-                                 (dom/li {:className (str "dato-selector " (when (= slot-idx (:current-save-slot l-state))))
-                                          :on-click  #(do
-                                                        (om/set-state! owner [:current-save-slot] slot-idx)
-                                                        (restore-save-state! owner slot-idx))}
-                                         (if existing-db
-                                           (str "Slot " slot-idx)
-                                           "No state saved"))))))
-               :query      (dom/div
-                            {:className "dato-debugger-query"}
-                            (when-let [current-query (get-in l-state [:query (:current-query l-state)])]
-                              (dom/div
-                               {:className "query-inspector"}
-                               (dom/pre
-                                (binding [*print-length* 10]
-                                  (let [query-results ((:fn current-query) db)]
-                                    (with-out-str (pp/pprint query-results)))))))
-                            (let [current-query (get-in l-state [:query (:current-query l-state)])]
-                              (dom/div
-                               {:className "query-editor"}
-                               (when (false? (:valid? current-query))
-                                 (dom/pre "Invalid code"))))
-                            (dom/input {:placeholder "Search Expressions"})
-                            (dom/div
-                             (dom/ul
-                              {:className "query-listing"}
-                              (for [[idx query] (map-indexed vector (:query l-state))
-                                    :let [current-query? (= idx (:current-query l-state))
-                                          title (str idx ". " (:title query))]]
-                                (dom/li {:className (str "dato-selector " (when current-query? "selected-item"))
-                                         :on-click #(om/set-state! owner [:current-query] idx)}
-                                        title)))))
-               :editor     (dom/div
-                            "Code editor"
-                            (dom/link {:rel      "stylesheet"
-                                       :property "stylesheet"
-                                       :href     "/css/vendor/codemirror/codemirror.css"})
-                            (dom/div {:className "editor"}))
-               :components (dom/div
-                            "Component States"
-                            (dom/div {:className "dato-debugger-components"}
-                                     (let [components        (state-watcher-coms @state-watchers)
-                                           inspected-com-key (:inspected-com-key l-state)]
-                                       (dom/div
+              {:className     "debugger"
+               :on-mouse-move #(.stopPropagation %)}
+              (dom/div
+                (dom/style {:scoped true} debugger-styles-str)
+                (dom/div
+                  {:className "debugger-head"}
+                  (let [coms [{:name  :timeline
+                               :title "History"}
+                              {:name  :components
+                               :title "Components"}
+                              {:name  :states
+                               :title "Saved States"}
+                              {:name  :query
+                               :title "Expression Watch"}]]
+                    (for [com-desc coms]
+                      (dom/button {:className (when (= (:tool l-state) (:name com-desc))
+                                                "selected")
+                                   :on-click #(om/set-state! owner [:tool] (:name com-desc))}
+                                  (:title com-desc))))
+                  " - Dato Debugger")
+                (dom/div
+                  (case (:tool l-state)
+                    :states     (dom/div
+                                  (dom/h3 "Current slot: " (:current-save-slot l-state))
+                                  (dom/ul
+                                   (for [slot-idx (range 1 10)]
+                                     (let [local-storage-name (str "dato_save_state_" slot-idx)
+                                           existing-db        (js/localStorage.getItem local-storage-name)]
+                                       (dom/li {:className (str "dato-selector " (when (= slot-idx (:current-save-slot l-state))))
+                                                :on-click  #(do
+                                                              (om/set-state! owner [:current-save-slot] slot-idx)
+                                                              (restore-save-state! owner slot-idx))}
+                                               (if existing-db
+                                                 (str "Slot " slot-idx)
+                                                 "No state saved"))))))
+                    :query      (dom/div
+                                  {:className "dato-debugger-query"}
+                                  (when-let [current-query (get-in l-state [:query (:current-query l-state)])]
+                                    (dom/div
+                                      {:className "query-inspector"}
+                                      (dom/pre
+                                       (binding [*print-length* 10]
+                                         (let [query-results ((:fn current-query) db)]
+                                           (with-out-str (pp/pprint query-results)))))))
+                                  (let [current-query (get-in l-state [:query (:current-query l-state)])]
+                                    (dom/div
+                                      {:className "query-editor"}
+                                      (when (false? (:valid? current-query))
+                                        (dom/pre "Invalid code"))))
+                                  (dom/input {:placeholder "Search Expressions"})
+                                  (dom/div
+                                    (dom/ul
+                                     {:className "query-listing"}
+                                     (for [[idx query] (map-indexed vector (:query l-state))
+                                           :let [current-query? (= idx (:current-query l-state))
+                                                 title (str idx ". " (:title query))]]
+                                       (dom/li {:className (str "dato-selector " (when current-query? "selected-item"))
+                                                :on-click #(om/set-state! owner [:current-query] idx)}
+                                               title)))))
+                    :editor     (dom/div
+                                  "Code editor"
+                                  (dom/link {:rel      "stylesheet"
+                                             :property "stylesheet"
+                                             :href     "/css/vendor/codemirror/codemirror.css"})
+                                  (dom/div {:className "editor"}))
+                    :components (dom/div
+                                  "Component States"
+                                  (dom/div {:className "dato-debugger-components"}
+                                    (let [components        (state-watcher-coms @state-watchers)
+                                          inspected-com-key (:inspected-com-key l-state)]
+                                      (dom/div
                                         (dom/input {:on-change   #(om/set-state! owner [:com-name-filter] (.. % -target -value))
                                                     :value        (:com-name-filter l-state)
                                                     :placeholder "Component Display Name"})
                                         (dom/div
-                                         {:className "component-listing"}
-                                         (if inspected-com-key
-                                           (dom/h4 (com-name @state-watchers inspected-com-key) "(" inspected-com-key ")")
-                                           (dom/h4 "No component"))
-                                         (when-let [inspected-com-key (:inspected-com-key l-state)]
-                                           (let [com-states  (com-state @state-watchers inspected-com-key)
-                                                 dato-state* (:dato com-states)
-                                                 dato-state  (when dato-state*
-                                                               (dsu/touch+ dato-state*))
-                                                 om-state    (:om com-states)]
-                                             (dom/div
-                                              "Dato/Recorded"
-                                              (dom/pre (with-out-str (pp/pprint dato-state)))
-                                              "Om/Transient"
-                                              (dom/pre (with-out-str (pp/pprint (->
-                                                                                 om-state
-                                                                                 (dissoc :dato.lib.db/listener-key)
-                                                                                 (dissoc :dato.lib.db/listener-keys)))))))))
+                                          {:className "component-listing"}
+                                          (if inspected-com-key
+                                            (dom/h4 (com-name @state-watchers inspected-com-key) "(" inspected-com-key ")")
+                                            (dom/h4 "No component"))
+                                          (when-let [inspected-com-key (:inspected-com-key l-state)]
+                                            (let [com-states  (com-state @state-watchers inspected-com-key)
+                                                  dato-state* (:dato com-states)
+                                                  dato-state  (when dato-state*
+                                                                (dsu/touch+ dato-state*))
+                                                  om-state    (:om com-states)]
+                                              (dom/div
+                                                "Dato/Recorded"
+                                                (dom/pre (with-out-str (pp/pprint dato-state)))
+                                                "Om/Transient"
+                                                (dom/pre (with-out-str (pp/pprint (->
+                                                                                   om-state
+                                                                                   (dissoc :dato.lib.db/listener-key)
+                                                                                   (dissoc :dato.lib.db/listener-keys)))))))))
                                         (dom/ul
                                          (for [com-key components
                                                :let [com-name (com-name @state-watchers com-key)]
@@ -434,43 +443,65 @@
                                                       :on-mouse-enter #(when owner-node (highlight-node! owner-node))
                                                       :on-mouse-leave #(when owner-node (unhighlight-node! owner-node))
                                                       :on-click #(om/set-state! owner [:inspected-com-key] com-key)} com-name "(" com-key ")"))))))))
-               :timeline   (dom/div
-                            {:className "dato-debugger-timeline"}
-                            (dom/h3 (pr-str (get-in log [selected-state-idx :tx/intent])))
-                            (dom/small "(" log-count " states)")
-                            (dom/div
-                             (dom/input {:type      "range"
-                                         :min       0
-                                         :max       (max 0 (dec (count (:log data))))
-                                         :value     (or (get-in l-state [:states :selected]) 0)
-                                         :on-change #(let [idx (reader/read-string (.. % -target -value))]
-                                                       (js/console.log "setting app state to idx: " idx)
-                                                       (om/set-state! owner [:states :selected] idx)
-                                                       (set-app-state! idx))})
-                             (dom/button {:on-click #(play-all-states!)
-                                          :disabled (not (pos? log-count))} "> Play All")
-                             (dom/div {:className "event-inspector"}
+                    :timeline   (dom/div
+                                  {:className "dato-debugger-timeline"}
+                                  (dom/button {:on-click #(let [session-id (js/prompt "Enter a session id")]
+                                                            (dato/rpc-call
+                                                             dato
+                                                             :session/fetch-history
+                                                             {:session-id session-id}
+                                                             (fn [history]
+                                                               (om/set-state!
+                                                                owner
+                                                                :log-override
+                                                                (reduce (fn [acc history-item]
+                                                                          (js/console.log (:tx-data history-item))
+                                                                          (let [transaction (mapv dsu/datom->transaction (:tx-data history-item))]
+                                                                            (js/console.log "tx" transaction)
+                                                                            (js/console.log "acc" acc)
+                                                                            (if (seq acc)
+                                                                              (conj acc {:tx (d/with (:db-after (:tx (last acc)))
+                                                                                                     transaction)})
+                                                                              ;; TODO: fix getting schema!
+                                                                              [{:tx (d/with (d/empty-db (:schema (dato/db dato))) transaction)}])))
+                                                                        [] history)))))}
+                                              "Load session")
+                                  (dom/h3 (pr-str (get-in log [selected-state-idx :tx/intent])))
+                                  (dom/small "(" log-count " states)")
+                                  (dom/div
+                                    (dom/input {:type      "range"
+                                                :min       0
+                                                :max       (max 0 (dec (count log)))
+                                                :value     (or (get-in l-state [:states :selected]) 0)
+                                                :on-change #(let [_ (js/console.log "huh?")
+                                                                  idx (reader/read-string (.. % -target -value))]
+                                                              (js/console.log "setting app state to idx: " idx)
+                                                              (om/set-state! owner [:states :selected] idx)
+                                                              (set-app-state! idx))})
+                                    (dom/button {:on-click #(play-all-states!)
+                                                 :disabled (not (pos? log-count))} "> Play All")
+                                    (dom/div {:className "event-inspector"}
                                       (dom/pre (pr-str (get-in selected-state [:tx :tx-data]))))
-                             (dom/ul
-                              {:className "event-listing"}
-                              (let [int (->> (:log data)
-                                             (map-indexed vector)
-                                             (reduce (fn [run [idx next]]
-                                                       (let [cnt        (count run)
-                                                             last-event (:tx/intent (nth run (dec cnt)))
-                                                             selected?  (= idx selected-state-idx)]
-                                                         (if (= last-event (:tx/intent next))
-                                                           (-> run
-                                                               (update-in [(dec cnt) :count] inc)
-                                                               (update-in [(dec cnt) :selected?] #(or selected? %)))
-                                                           (conj run (-> next
-                                                                         (assoc :count 1)
-                                                                         (assoc :selected? selected?)))))) [{}]))]
-                                (for [tx int]
-                                  (dom/li
-                                   {:className (when (:selected? tx) "selected-event")}
-                                   (pr-str (:tx/intent tx))
-                                   (when (pos? (dec (:count tx))) (str " x " (:count tx)))))))))))))))))))
+                                    (dom/ul
+                                     {:className "event-listing"}
+                                     (let [int (->> (:log data)
+                                                    (map-indexed vector)
+                                                    (reduce (fn [run [idx next]]
+                                                              (let [cnt        (count run)
+                                                                    last-event (:tx/intent (nth run (dec cnt)))
+                                                                    selected?  (= idx selected-state-idx)]
+                                                                (if (= last-event (:tx/intent next))
+                                                                  (-> run
+                                                                      (update-in [(dec cnt) :count] inc)
+                                                                      (update-in [(dec cnt) :selected?] #(or selected? %)))
+                                                                  (conj run (-> next
+                                                                                (assoc :count 1)
+                                                                                (assoc :selected? selected?)))))) [{}]))]
+                                       (for [tx int]
+                                         (dom/li
+                                          {:className (when (:selected? tx) "selected-event")}
+                                          (pr-str (:tx/intent tx))
+                                          (when (pos? (dec (:count tx))) (str " x " (:count tx)))))))))))))))))))
 
 (defn devtools [data owner opts]
   (reify

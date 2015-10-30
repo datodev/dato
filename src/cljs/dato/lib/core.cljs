@@ -276,19 +276,17 @@
         context         (merge additional-context api {:dato dato
                                                        :ss   ss})
         update-history! (fn [tx-report]
-                          (when-let [store-txn! (get @ss :store-session-txn!)]
-                            (store-txn! {:tx/intent     (get-in tx-report [:tx-meta :tx/intent])
-                                         :time          (js/Date.)
-                                         :tx-data       (:tx-data tx-report)
-                                         :optimistic?   (:optimistic? tx-report)
-                                         :tx/transient? (get-in tx-report [:tx-meta :tx/transient?])}))
-                          (when (get-in tx-report [:tx-meta :tx/intent])
-                            (swap! history update-in [:log] conj {:tx/intent     (get-in tx-report [:tx-meta :tx/intent])
-                                                                  :time          (js/Date.)
-                                                                  :tx            tx-report
-                                                                  :tx/transient? (get-in tx-report [:tx-meta :tx/transient?])}))
-
-                          (rpc-call dato :session/record {:tx-data (:tx-data tx-report)}))]
+                          (let [history-item {:tx/intent     (get-in tx-report [:tx-meta :tx/intent])
+                                              :time          (js/Date.)
+                                              :tx-data       (:tx-data tx-report)
+                                              :optimistic?   (:optimistic? tx-report)
+                                              :tx/transient? (get-in tx-report [:tx-meta :tx/transient?])}]
+                            (when-let [store-txn! (get @ss :store-session-txn!)]
+                              (store-txn! history-item))
+                            (when (get-in tx-report [:tx-meta :tx/intent])
+                              (swap! history update-in [:log] conj (assoc history-item :tx tx-report)))
+                            ;; TODO: add version of code
+                            (rpc-call dato :session/record history-item)))]
     ;; XXX: Uneasy with:
     ;; 1. Hard-coding history-listener here (what about other plugins?)
     ;; 2. Transactions needing history-listener-specific metadata (plugging it in now becomes difficult)

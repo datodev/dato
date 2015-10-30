@@ -269,13 +269,22 @@
   (swap! (:session-store dato-state) update-in [session-id :history] (fnil conj []) incoming)
   true)
 
+(defn send-session-transitions [dato-state _ incoming]
+  (-> dato-state
+      :session-store
+      (get-session (:session-id incoming))
+      :history))
+
+
 (def default-routing-table
-  {[:session/updated] {:handler #'update-session}
-   [:session/record]  {:handler #'record-session-transition}
-   [:ss/r-q]          {:handler #'r-q}
-   [:ss/r-qes-by]     {:handler #'r-qes-by}
-   [:ss/r-pull]       {:handler #'r-pull}
-   [:ss/bootstrap]    {:handler #'bootstrap-user}})
+  {[:session/updated]       {:handler #'update-session}
+   [:session/record]        {:handler #'record-session-transition}
+   ;; TODO: only admins should get access to this
+   [:session/fetch-history] {:handler #'send-session-transitions}
+   [:ss/r-q]                {:handler #'r-q}
+   [:ss/r-qes-by]           {:handler #'r-qes-by}
+   [:ss/r-pull]             {:handler #'r-pull}
+   [:ss/bootstrap]          {:handler #'bootstrap-user}})
 
 (defn new-routing-table [table]
   (merge default-routing-table table))
@@ -320,11 +329,8 @@
   (validate-config config)
   (let [dato-server (:server config)
         tal-state (tal/init :transit-reader-opts {:handlers {"r"                (transit/read-handler (fn [s] (URI. s)))
-                                                             "datascript/Datom" (transit/read-handler datascript-datom->datom)}}
-                            :transit-writer-opts {:handlers {;; Do we still need this one?
-                                                             dato.lib.server.Datom (transit/write-handler (constantly "datascript/Datom")
-                                                                                                          transit-rep)
-                                                             datascript.core.Datom
+                                                             "datascript/Datom" (transit/read-handler datascript.core/datom-from-reader)}}
+                            :transit-writer-opts {:handlers {datascript.core.Datom
                                                              (transit/write-handler (constantly "datascript/Datom")
                                                                                     (fn [d] [(:e d) (:a d) (:v d) (:tx d) (:added d)]))}})
         session-store all-sessions]
