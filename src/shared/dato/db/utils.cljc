@@ -94,8 +94,8 @@
   (select-keys datom [:e :a :v :tx :added]))
 
 (defn datom->transaction [datom]
-  (let [[a e v tx added?] datom]
-    [(if added? :db/add :db/retract)
+  (let [{:keys [a e v tx added]} datom]
+    [(if added :db/add :db/retract)
      e
      #?(:clj  a
         :cljs a)
