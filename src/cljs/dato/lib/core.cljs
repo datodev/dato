@@ -286,7 +286,9 @@
                             (swap! history update-in [:log] conj {:tx/intent     (get-in tx-report [:tx-meta :tx/intent])
                                                                   :time          (js/Date.)
                                                                   :tx            tx-report
-                                                                  :tx/transient? (get-in tx-report [:tx-meta :tx/transient?])})))]
+                                                                  :tx/transient? (get-in tx-report [:tx-meta :tx/transient?])}))
+
+                          (rpc-call dato :session/record {:tx-data (:tx-data tx-report)}))]
     ;; XXX: Uneasy with:
     ;; 1. Hard-coding history-listener here (what about other plugins?)
     ;; 2. Transactions needing history-listener-specific metadata (plugging it in now becomes difficult)

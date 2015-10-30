@@ -265,8 +265,13 @@
     (ss-msg (keyword "server" (str (name qes-name) "-succeeded"))
             {:results data})))
 
+(defn record-session-transition [dato-state session-id incoming]
+  (swap! (:session-store dato-state) update-in [session-id :history] (fnil conj []) incoming)
+  true)
+
 (def default-routing-table
   {[:session/updated] {:handler #'update-session}
+   [:session/record]  {:handler #'record-session-transition}
    [:ss/r-q]          {:handler #'r-q}
    [:ss/r-qes-by]     {:handler #'r-qes-by}
    [:ss/r-pull]       {:handler #'r-pull}
