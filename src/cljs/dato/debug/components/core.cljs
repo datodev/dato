@@ -171,7 +171,9 @@
                      :font-weight   "bolder"}]]]
      [:.dato-debugger-query
       [:.query-inspector {:width "80%"
-                         :float "right"}]
+                          :float "right"}
+       [:pre {:height     "50%"
+              :overflow-y "scroll"}]]
       [:.query-listing {:width "20%"}]
       [:.code-editor {:width  "20%"
                       :height 50}]]
@@ -180,8 +182,10 @@
                             :width "50%"}]]
      [:.dato-debugger-timeline
       [:.selected-event {:font-weight "bolder"}]
-      [:.event-inspector {:float "right"
-                          :width "85%"}]
+      [:.event-inspector {:float      "right"
+                          :width      "85%"
+                          :height     "80%"
+                          :overflow-y "scroll"}]
       [:.event-listing {:width "15%"}]]]]])
 
 (def debugger-styles-str
