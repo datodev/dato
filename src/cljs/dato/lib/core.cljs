@@ -263,6 +263,22 @@
     (assert f (str "rpc-fn called for non-existent keyword " rpc-kw))
     (apply f args)))
 
+(defn make-history-listener [dato]
+  (let [ss      (get-in dato [:ss])
+        history (get-in dato [:history])]
+    (fn update-history! [tx-report]
+      (let [history-item {:tx/intent     (get-in tx-report [:tx-meta :tx/intent])
+                          :time          (js/Date.)
+                          :tx-data       (:tx-data tx-report)
+                          :optimistic?   (:optimistic? tx-report)
+                          :tx/transient? (get-in tx-report [:tx-meta :tx/transient?])}]
+        (when-let [store-txn! (get @ss :store-session-txn!)]
+          (store-txn! history-item))
+        (when (get-in tx-report [:tx-meta :tx/intent])
+          (swap! history update-in [:log] conj (assoc history-item :tx tx-report)))
+        ;; TODO: add version of code
+        (rpc-call dato :session/record history-item)))))
+
 (defn start-loop! [dato additional-context]
   (let [dato-ch         (get-in dato [:comms :dato])
         conn            (get-in dato [:conn])
@@ -273,20 +289,9 @@
         history         (get-in dato [:history])
         ;; User's additional-context isn't able to override the
         ;; dato-provided context, to prevent confusion
+        update-history! (make-history-listener dato)
         context         (merge additional-context api {:dato dato
-                                                       :ss   ss})
-        update-history! (fn [tx-report]
-                          (let [history-item {:tx/intent     (get-in tx-report [:tx-meta :tx/intent])
-                                              :time          (js/Date.)
-                                              :tx-data       (:tx-data tx-report)
-                                              :optimistic?   (:optimistic? tx-report)
-                                              :tx/transient? (get-in tx-report [:tx-meta :tx/transient?])}]
-                            (when-let [store-txn! (get @ss :store-session-txn!)]
-                              (store-txn! history-item))
-                            (when (get-in tx-report [:tx-meta :tx/intent])
-                              (swap! history update-in [:log] conj (assoc history-item :tx tx-report)))
-                            ;; TODO: add version of code
-                            (rpc-call dato :session/record history-item)))]
+                                                       :ss   ss})]
     ;; XXX: Uneasy with:
     ;; 1. Hard-coding history-listener here (what about other plugins?)
     ;; 2. Transactions needing history-listener-specific metadata (plugging it in now becomes difficult)
@@ -324,6 +329,8 @@
                                    (:tx/persist? full-tx-meta))
                              (web-peer/transact conn tx-data full-tx-meta)
                              (d/transact! conn tx-data full-tx-meta))
+                           ;; XXX: Refactor this so that we can just
+                           ;; use web-peer stuff
                            (update-history! {:tx-meta full-tx-meta}))
                          (con/effect! context previous-state @conn payload)))
                      (recur))))
