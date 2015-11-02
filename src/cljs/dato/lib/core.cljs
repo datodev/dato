@@ -205,13 +205,13 @@
                                                                (reset! app-db @conn)
                                                                (doto app-db
                                                                  (db/setup-listener! :global-listener))
-
                                                                (let [local-session-id (d/tempid :db.part/user)
                                                                      local-session-tx [{:db/id                 (d/tempid :db.part/user)
                                                                                         :dato.meta/bootrapped? true}
                                                                                        ;; TODO: This can likely be moved out to a user-land handler
                                                                                        (assoc (:session data) :db/id local-session-id)
-                                                                                       {:local/current-session {:db/id local-session-id}}]]
+                                                                                       {:db/id                 (d/tempid :db.part/user)
+                                                                                        :local/current-session {:db/id local-session-id}}]]
                                                                  (d/transact! app-db (vals schema))
                                                                  (d/transact! app-db local-session-tx))
 
