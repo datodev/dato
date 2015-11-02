@@ -227,14 +227,11 @@
                                          :extraKeys #js{:Alt-Enter (fn [cm]
                                                                      (let [doc       (.getDoc cm)
                                                                            doc-value (.getValue doc)]
-                                                                       (js/console.log (.greet js/window "Life"))
-                                                                       (eval doc-value)
-                                                                       (js/console.log (.greet js/window "Life"))
-                                                                       (js/console.log "--------------------")))}}))))
+                                                                       (eval doc-value)))}}))))
     om/IRender
     (render [_]
       (let [dato                (om/get-shared owner [:dato])
-                                ;; TODO: better way to switch over the logs
+            ;; TODO: better way to switch over the logs
             log                 (or (om/get-state owner :log-override)
                                     (-> dato
                                         :history
