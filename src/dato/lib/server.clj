@@ -263,7 +263,11 @@
             {:results data})))
 
 (defn record-session-transition [dato-state session-id incoming]
-  (swap! (:session-store dato-state) update-in [session-id :history] (fnil conj []) incoming)
+  (swap! (:session-store dato-state) update-in [session-id :history :log] (fnil conj []) incoming)
+  true)
+
+(defn annotate-session! [dato-state session-id session-meta]
+  (swap! (:session-store dato-state) update-in [session-id :history :session/meta] merge session-meta)
   true)
 
 (defn send-session-transitions [dato-state _ incoming]
@@ -276,6 +280,7 @@
 (def default-routing-table
   {[:session/updated]       {:handler #'update-session}
    [:session/record]        {:handler #'record-session-transition}
+   [:session/annotate!]     {:handler #'annotate-session!}
    ;; TODO: only admins should get access to this
    [:session/fetch-history] {:handler #'send-session-transitions}
    [:ss/r-q]                {:handler #'r-q}
